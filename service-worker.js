@@ -1,5 +1,5 @@
 // service-worker.js - גרסה משולבת שעובדת!
-const CACHE_NAME = 'panan-bakan-v1.0.5';
+const CACHE_NAME = 'panan-bakan-v1.1.0';
 const urlsToCache = [
   '/family/',
   '/family/dashboard.php',
@@ -8,6 +8,7 @@ const urlsToCache = [
   '/family/css/group.css',
   '/family/css/styles.css',
   '/family/js/group.js',
+  '/family/js/dashboard.js',
   '/family/offline.html',
   '/family/images/icons/android/android-launchericon-192-192.png',
   '/family/images/icons/android/android-launchericon-512-512.png'

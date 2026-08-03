@@ -2,6 +2,41 @@
 // includes/group_modals.php
 // כל ה-Modals של דף הקבוצה
 
+/**
+ * בורר המשתתפים בקנייה.
+ * מסומן = משתתף בהוצאה. הטופס שולח דווקא את *הלא* מסומנים,
+ * כי זה מה שנשמר בטבלת ההחרגות.
+ */
+function renderParticipantPicker($members, $idPrefix) {
+    ?>
+    <div class="form-group participants-picker">
+        <label>מי משתתף בהוצאה הזו?</label>
+        <div class="picker-actions">
+            <button type="button" class="btn-link" onclick="toggleAllParticipants('<?php echo $idPrefix; ?>', true)">
+                סמן הכל
+            </button>
+            <button type="button" class="btn-link" onclick="toggleAllParticipants('<?php echo $idPrefix; ?>', false)">
+                נקה הכל
+            </button>
+        </div>
+        <div class="participants-list" id="<?php echo $idPrefix; ?>Participants">
+            <?php foreach ($members as $member): ?>
+            <label class="participant-option">
+                <input type="checkbox"
+                       class="<?php echo $idPrefix; ?>-participant"
+                       value="<?php echo (int)$member['id']; ?>"
+                       checked>
+                <span><?php echo htmlspecialchars($member['nickname']); ?></span>
+            </label>
+            <?php endforeach; ?>
+        </div>
+        <small class="form-hint">
+            מי שלא מסומן לא ישלם על הקנייה הזו, וחלקו יתחלק בין השאר
+        </small>
+    </div>
+    <?php
+}
+
 function renderAddMemberModal($available_percentage) {
     ?>
     <div id="addMemberModal" class="modal">
@@ -35,11 +70,11 @@ function renderAddMemberModal($available_percentage) {
                 <div class="form-group">
                     <label for="memberValue">ערך השתתפות:</label>
                     <div class="input-with-suffix">
-                        <input type="number" id="memberValue" step="0.01" required>
+                        <input type="number" id="memberValue" step="0.01" min="0.01" required>
                         <span id="valueSuffix">%</span>
                     </div>
                     <small id="percentageInfo" class="form-hint">
-                        נותרו <?php echo $available_percentage; ?>% זמינים להקצאה
+                        נותרו <?php echo round($available_percentage, 2); ?>% זמינים להקצאה
                     </small>
                 </div>
                 <div class="modal-actions">
@@ -51,6 +86,32 @@ function renderAddMemberModal($available_percentage) {
                     </button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- מוצג אחרי יצירת הזמנה, עם קישור להעתקה -->
+    <div id="inviteLinkModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>ההזמנה נוצרה</h2>
+                <span class="close" onclick="closeInviteLinkModal()">&times;</span>
+            </div>
+            <p id="inviteLinkMessage" class="modal-text"></p>
+            <div class="form-group">
+                <label for="inviteLinkInput">קישור הצטרפות:</label>
+                <input type="text" id="inviteLinkInput" readonly onclick="this.select()">
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn-primary" onclick="copyInviteLink()">
+                    <i class="fas fa-copy"></i> העתק קישור
+                </button>
+                <a id="inviteWhatsappLink" class="btn-whatsapp" target="_blank" rel="noopener">
+                    <i class="fab fa-whatsapp"></i> שלח בוואטסאפ
+                </a>
+                <button type="button" class="btn-secondary" onclick="closeInviteLinkModal()">
+                    סגור
+                </button>
+            </div>
         </div>
     </div>
     <?php
@@ -82,7 +143,7 @@ function renderEditMemberModal() {
                 <div class="form-group">
                     <label for="editMemberValue">ערך השתתפות:</label>
                     <div class="input-with-suffix">
-                        <input type="number" id="editMemberValue" step="0.01" required>
+                        <input type="number" id="editMemberValue" step="0.01" min="0.01" required>
                         <span id="editValueSuffix">%</span>
                     </div>
                     <small id="editPercentageInfo" class="form-hint"></small>
@@ -101,7 +162,7 @@ function renderEditMemberModal() {
     <?php
 }
 
-function renderAddPurchaseModal($members, $is_owner, $member_id) {
+function renderAddPurchaseModal($members, $is_owner, $member_id, $featuresReady = true) {
     ?>
     <div id="addPurchaseModal" class="modal">
         <div class="modal-content">
@@ -110,21 +171,23 @@ function renderAddPurchaseModal($members, $is_owner, $member_id) {
                 <span class="close" onclick="closeAddPurchaseModal()">&times;</span>
             </div>
             <form id="addPurchaseForm" enctype="multipart/form-data">
+                <input type="hidden" id="purchaseItemId" value="">
+
                 <?php if ($is_owner): ?>
                 <div class="form-group">
-                    <label for="purchaseMember">בחר משתתף:</label>
+                    <label for="purchaseMember">מי שילם:</label>
                     <select id="purchaseMember" required>
                         <option value="">בחר משתתף...</option>
                         <?php foreach ($members as $member): ?>
-                        <option value="<?php echo $member['id']; ?>">
+                        <option value="<?php echo (int)$member['id']; ?>"
+                                <?php echo ((int)$member['id'] === (int)$member_id) ? 'selected' : ''; ?>>
                             <?php echo htmlspecialchars($member['nickname']); ?>
                         </option>
                         <?php endforeach; ?>
                     </select>
                 </div>
                 <?php else: ?>
-                <!-- משתמש רגיל - הקנייה תירשם על שמו בלבד -->
-                <input type="hidden" id="purchaseMember" value="<?php echo $member_id; ?>">
+                <input type="hidden" id="purchaseMember" value="<?php echo (int)$member_id; ?>">
                 <div class="form-group">
                     <label>הקנייה תירשם על שמך</label>
                     <div class="info-message">
@@ -133,19 +196,22 @@ function renderAddPurchaseModal($members, $is_owner, $member_id) {
                     </div>
                 </div>
                 <?php endif; ?>
-                
+
                 <div class="form-group">
                     <label for="purchaseAmount">סכום הקנייה (₪):</label>
-                    <input type="number" id="purchaseAmount" step="0.01" required>
+                    <input type="number" id="purchaseAmount" step="0.01" min="0.01" required>
                 </div>
                 <div class="form-group">
                     <label for="purchaseDescription">תיאור המוצרים:</label>
-                    <textarea id="purchaseDescription" rows="4"></textarea>
+                    <textarea id="purchaseDescription" rows="3"></textarea>
                 </div>
+
+                <?php if ($featuresReady) renderParticipantPicker($members, 'add'); ?>
+
                 <div class="form-group">
                     <label for="purchaseImage">תמונת קבלה:</label>
                     <input type="file" id="purchaseImage" accept="image/*" onchange="previewImage(event)">
-                    <img id="imagePreview" class="image-preview" style="display: none;">
+                    <img id="imagePreview" class="image-preview" style="display: none;" alt="">
                 </div>
                 <div class="modal-actions">
                     <button type="submit" class="btn-primary">
@@ -161,14 +227,126 @@ function renderAddPurchaseModal($members, $is_owner, $member_id) {
     <?php
 }
 
+function renderEditPurchaseModal($members) {
+    ?>
+    <div id="editPurchaseModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>עריכת קנייה</h2>
+                <span class="close" onclick="closeEditPurchaseModal()">&times;</span>
+            </div>
+            <form id="editPurchaseForm">
+                <input type="hidden" id="editPurchaseId">
+                <div class="form-group">
+                    <label for="editPurchaseAmount">סכום הקנייה (₪):</label>
+                    <input type="number" id="editPurchaseAmount" step="0.01" min="0.01" required>
+                </div>
+                <div class="form-group">
+                    <label for="editPurchaseDescription">תיאור המוצרים:</label>
+                    <textarea id="editPurchaseDescription" rows="3"></textarea>
+                </div>
+
+                <?php renderParticipantPicker($members, 'edit'); ?>
+
+                <div class="modal-actions">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i> שמור
+                    </button>
+                    <button type="button" class="btn-secondary" onclick="closeEditPurchaseModal()">
+                        ביטול
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <?php
+}
+
+function renderItemModal() {
+    ?>
+    <div id="itemModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="itemModalTitle">הוספת פריט</h2>
+                <span class="close" onclick="closeItemModal()">&times;</span>
+            </div>
+            <form id="itemForm">
+                <input type="hidden" id="itemId" value="">
+                <div class="form-group">
+                    <label for="itemTitle">מה צריך?</label>
+                    <input type="text" id="itemTitle" placeholder="לדוגמה: פיתות" required>
+                </div>
+                <div class="form-group">
+                    <label for="itemQuantity">כמות (אופציונלי):</label>
+                    <input type="text" id="itemQuantity" placeholder="לדוגמה: 3 חבילות">
+                </div>
+                <div class="form-group">
+                    <label for="itemNotes">הערות (אופציונלי):</label>
+                    <textarea id="itemNotes" rows="2"></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i> שמור
+                    </button>
+                    <button type="button" class="btn-secondary" onclick="closeItemModal()">
+                        ביטול
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <?php
+}
+
+function renderEventModal($group) {
+    ?>
+    <div id="eventModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>פרטי האירוע</h2>
+                <span class="close" onclick="closeEventModal()">&times;</span>
+            </div>
+            <form id="eventForm">
+                <div class="form-group">
+                    <label for="eventName">שם האירוע:</label>
+                    <input type="text" id="eventName"
+                           value="<?php echo htmlspecialchars($group['name']); ?>" required>
+                </div>
+                <div class="form-group">
+                    <label for="eventDescription">תיאור:</label>
+                    <textarea id="eventDescription" rows="2"><?php echo htmlspecialchars($group['description'] ?? ''); ?></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="eventDate">תאריך האירוע:</label>
+                    <input type="date" id="eventDate"
+                           value="<?php echo htmlspecialchars($group['event_date'] ?? ''); ?>">
+                </div>
+                <div class="form-group">
+                    <label for="eventLocation">מיקום:</label>
+                    <input type="text" id="eventLocation" placeholder="לדוגמה: אצל סבתא"
+                           value="<?php echo htmlspecialchars($group['event_location'] ?? ''); ?>">
+                </div>
+                <div class="modal-actions">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i> שמור
+                    </button>
+                    <button type="button" class="btn-secondary" onclick="closeEventModal()">
+                        ביטול
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <?php
+}
+
 function renderImageModal() {
     ?>
     <div id="imageModal" class="modal">
         <div class="modal-content image-modal">
             <span class="close" onclick="closeImageModal()">&times;</span>
-            <img id="modalImage" src="">
+            <img id="modalImage" src="" alt="קבלה">
         </div>
     </div>
     <?php
 }
-?>

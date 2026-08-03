@@ -50,9 +50,12 @@ define('DB_CHARSET', $_ENV['DB_CHARSET'] ?? 'utf8mb4');
 define('GOOGLE_CLIENT_ID', $_ENV['CLIENT_ID'] ?? '');
 
 // הגדרות כלליות
-define('SITE_NAME', 'מערכת ניהול קניות לאירועים משפחתיים');
+define('SITE_NAME', 'מנהל האירועים המשפחתי');
 define('TIMEZONE', 'Asia/Jerusalem');
 define('CURRENCY_SYMBOL', '₪');
+
+// נתיב הבסיס של האפליקציה באתר (בלי סלאש בסוף)
+define('APP_BASE_PATH', rtrim($_ENV['APP_BASE_PATH'] ?? '/family', '/'));
 
 // הגדרות העלאת קבצים
 define('UPLOAD_DIR', 'uploads/');

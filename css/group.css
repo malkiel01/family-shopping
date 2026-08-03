@@ -982,3 +982,381 @@ body {
         gap: 10px;
     }
 }
+/* ============================================================
+   מנהל האירוע - כותרת, סטטיסטיקות ורשימת קניות
+   ============================================================ */
+
+.migration-notice {
+    background: #fff3cd;
+    border-right: 4px solid #ffc107;
+    color: #856404;
+    padding: 15px 20px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: flex-start;
+    gap: 15px;
+}
+
+.migration-notice i {
+    font-size: 24px;
+    margin-top: 3px;
+}
+
+.migration-notice p {
+    margin-top: 5px;
+    font-size: 14px;
+}
+
+.migration-notice code {
+    background: rgba(0,0,0,0.08);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+/* כותרת האירוע */
+.event-header {
+    background: white;
+    border-radius: 15px;
+    padding: 25px;
+    margin-bottom: 20px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.event-header.closed {
+    opacity: 0.85;
+    border-right: 5px solid #6c757d;
+}
+
+.event-main h1 {
+    color: #333;
+    font-size: 26px;
+    margin-bottom: 5px;
+}
+
+.event-description {
+    color: #666;
+    font-size: 15px;
+    margin-bottom: 10px;
+}
+
+.event-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    color: #666;
+    font-size: 14px;
+}
+
+.event-meta span {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.event-meta i {
+    color: #667eea;
+}
+
+.status-badge.closed {
+    background: #6c757d;
+    color: white;
+    padding: 3px 12px;
+    border-radius: 20px;
+    font-size: 13px;
+}
+
+.event-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+/* סרגל מצב */
+.event-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.event-stat {
+    background: white;
+    border-radius: 12px;
+    padding: 15px;
+    text-align: center;
+    box-shadow: 0 3px 12px rgba(0,0,0,0.08);
+}
+
+.event-stat .stat-value {
+    display: block;
+    font-size: 24px;
+    font-weight: bold;
+    color: #667eea;
+}
+
+.event-stat .stat-label {
+    display: block;
+    font-size: 13px;
+    color: #666;
+    margin-top: 4px;
+}
+
+.event-stat.ok .stat-value { color: #28a745; }
+.event-stat.pending .stat-value { color: #dc3545; }
+
+.tab-badge {
+    background: #dc3545;
+    color: white;
+    border-radius: 10px;
+    padding: 1px 8px;
+    font-size: 12px;
+    margin-right: 5px;
+}
+
+.header-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+/* רשימת "מה צריך" */
+.items-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.item-row {
+    background: white;
+    border-radius: 12px;
+    padding: 15px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 15px;
+    box-shadow: 0 3px 12px rgba(0,0,0,0.06);
+    border-right: 4px solid #ddd;
+    flex-wrap: wrap;
+}
+
+.item-row.status-claimed { border-right-color: #ffc107; }
+.item-row.status-bought  { border-right-color: #28a745; opacity: 0.7; }
+
+.item-row.status-bought .item-title {
+    text-decoration: line-through;
+    color: #888;
+}
+
+.item-main { flex: 1; min-width: 200px; }
+
+.item-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #333;
+}
+
+.item-quantity {
+    background: #f0f0f5;
+    color: #555;
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 13px;
+    font-weight: normal;
+    margin-right: 8px;
+}
+
+.item-notes {
+    color: #777;
+    font-size: 13px;
+    margin-top: 4px;
+}
+
+.item-status {
+    color: #666;
+    font-size: 13px;
+    margin-top: 6px;
+}
+
+.item-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.items-summary {
+    color: rgba(255,255,255,0.9);
+    text-align: center;
+    margin-top: 15px;
+    font-size: 14px;
+}
+
+/* כפתורים קטנים */
+.btn-small {
+    background: #f0f0f5;
+    color: #444;
+    border: none;
+    padding: 8px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.2s;
+}
+
+.btn-small:hover { background: #e2e2ea; }
+
+.btn-small.primary { background: #667eea; color: white; }
+.btn-small.primary:hover { background: #5a6fd8; }
+
+.btn-icon, .btn-icon-danger {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 6px;
+    font-size: 14px;
+    color: #888;
+    transition: all 0.2s;
+}
+
+.btn-icon:hover { background: #f0f0f5; color: #667eea; }
+.btn-icon-danger:hover { background: #fde8e8; color: #dc3545; }
+
+.btn-link {
+    background: none;
+    border: none;
+    color: #667eea;
+    cursor: pointer;
+    font-size: 13px;
+    text-decoration: underline;
+    padding: 0;
+}
+
+.btn-whatsapp {
+    background: #25d366;
+    color: white;
+    padding: 12px 20px;
+    border-radius: 8px;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 15px;
+}
+
+.btn-whatsapp:hover { background: #1fb855; }
+
+/* בורר משתתפים בקנייה */
+.participants-picker {
+    background: #f8f8fc;
+    border-radius: 10px;
+    padding: 15px;
+}
+
+.picker-actions {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 10px;
+}
+
+.participants-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 8px;
+}
+
+.participant-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: white;
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    border: 2px solid transparent;
+    transition: border-color 0.2s;
+}
+
+.participant-option:has(input:checked) { border-color: #667eea; }
+
+.participant-option input { cursor: pointer; }
+
+.purchase-exclusions {
+    background: #fff8e6;
+    color: #8a6d3b;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+    margin-top: 10px;
+}
+
+/* התחשבנות */
+.btn-settle {
+    background: #28a745;
+    color: white;
+    border: none;
+    padding: 8px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn-settle:hover { background: #218838; }
+
+.calc-row.settled {
+    color: #888;
+    font-size: 13px;
+}
+
+.settlements-section {
+    background: white;
+    border-radius: 15px;
+    padding: 20px;
+    margin-top: 20px;
+}
+
+.settlements-section h3 { margin-bottom: 15px; color: #333; }
+
+.settlement-row {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 12px 0;
+    border-bottom: 1px solid #f0f0f0;
+    flex-wrap: wrap;
+    font-size: 14px;
+}
+
+.settlement-row:last-child { border-bottom: none; }
+
+.settlement-parties { flex: 1; color: #333; }
+.settlement-amount { font-weight: bold; color: #28a745; }
+.settlement-date { color: #999; font-size: 13px; }
+
+.modal-text { color: #555; margin-bottom: 15px; }
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+}
+
+@media (max-width: 600px) {
+    .event-header { flex-direction: column; }
+    .event-actions { width: 100%; }
+    .form-row { grid-template-columns: 1fr; }
+    .item-row { flex-direction: column; align-items: stretch; }
+    .item-actions { justify-content: flex-end; }
+}

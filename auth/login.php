@@ -1,11 +1,20 @@
 <?php
-session_start();
-require_once '../config.php';  // תיקון: חזרה לתיקייה הראשית
+require_once '../config.php';
+require_once '../includes/session.php';
 
-// אם המשתמש כבר מחובר, העבר לדף הראשי
-if (isset($_SESSION['user_id'])) {
-    header('Location: ../dashboard.php');  // תיקון: חזרה לתיקייה הראשית
+/**
+ * מסיים התחברות: מפנה ליעד שנשמר לפני ההתחברות
+ * (למשל קישור הזמנה) או לדשבורד.
+ */
+function finishLogin() {
+    $target = consumeLoginRedirect();
+    header('Location: ' . ($target ?: APP_BASE_PATH . '/dashboard.php'));
     exit;
+}
+
+// אם המשתמש כבר מחובר, העבר ליעד
+if (isset($_SESSION['user_id'])) {
+    finishLogin();
 }
 
 $error = '';
@@ -35,9 +44,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
             $_SESSION['name'] = $user['name'];
             $_SESSION['email'] = $user['email'];
             $_SESSION['profile_picture'] = $user['profile_picture'];
-            
-            header('Location: ../dashboard.php');  // תיקון: חזרה לתיקייה הראשית
-            exit;
+
+            finishLogin();
         } else {
             $error = 'שם משתמש או סיסמה שגויים';
         }
@@ -137,15 +145,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['register'])) {
         </div>
         
         <div class="login-body">
+            <?php if (isset($_GET['invited'])): ?>
+                <div class="alert alert-success">
+                    <i class="fas fa-envelope-open-text"></i>
+                    הוזמנת לאירוע! התחברו או הירשמו, ונחזיר אתכם להזמנה
+                </div>
+            <?php elseif (isset($_GET['timeout'])): ?>
+                <div class="alert alert-error">
+                    <i class="fas fa-clock"></i> הסשן פג. יש להתחבר מחדש
+                </div>
+            <?php endif; ?>
+
             <?php if ($error): ?>
                 <div class="alert alert-error">
-                    <i class="fas fa-exclamation-circle"></i> <?php echo $error; ?>
+                    <i class="fas fa-exclamation-circle"></i> <?php echo htmlspecialchars($error); ?>
                 </div>
             <?php endif; ?>
             
             <?php if ($success): ?>
                 <div class="alert alert-success">
-                    <i class="fas fa-check-circle"></i> <?php echo $success; ?>
+                    <i class="fas fa-check-circle"></i> <?php echo htmlspecialchars($success); ?>
                 </div>
             <?php endif; ?>
             

@@ -1,0 +1,12 @@
+# חוסם הרצת קוד בתיקיית ההעלאות.
+# גם אם מישהו הצליח להעלות קובץ שאינו תמונה, הוא לא ירוץ כאן.
+
+php_flag engine off
+
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+</IfModule>
+
+<FilesMatch "\.(php|php\d|phtml|phar|pl|py|cgi|sh|htaccess)$">
+    Require all denied
+</FilesMatch>

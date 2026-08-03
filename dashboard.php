@@ -1,237 +1,328 @@
 <?php
 /**
- * דף דשבורד מוגן
+ * דף האירועים של המשתמש
  * dashboard.php
  */
 
-// בדיקת הרשאות
-require_once 'includes/auth_check.php';
 require_once 'config.php';
+require_once 'includes/auth_check.php';
+require_once 'includes/schema.php';
 
-$pdo = getDBConnection();
+$pdo     = getDBConnection();
 $user_id = $_SESSION['user_id'];
 
-// טיפול ביצירת קבוצה חדשה
+$featuresReady = eventFeaturesReady($pdo);
+
+// ============================================================
+// פעולות AJAX
+// ============================================================
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
-    header('Content-Type: application/json');
-    
-    // בדיקת CSRF כבר נעשתה ב-auth_check.php
-    
+    header('Content-Type: application/json; charset=utf-8');
+
     switch ($_POST['action']) {
+
         case 'createGroup':
+            $name        = trim($_POST['name'] ?? '');
+            $description = trim($_POST['description'] ?? '');
+            $eventDate   = trim($_POST['event_date'] ?? '');
+            $location    = trim($_POST['event_location'] ?? '');
+            $type        = ($_POST['participation_type'] ?? '') === 'fixed' ? 'fixed' : 'percentage';
+            $value       = round(floatval($_POST['participation_value'] ?? 0), 2);
+
+            if ($name === '') {
+                echo json_encode(['success' => false, 'message' => 'יש להזין שם לאירוע']);
+                exit;
+            }
+            if ($value <= 0) {
+                echo json_encode(['success' => false, 'message' => 'ערך ההשתתפות חייב להיות חיובי']);
+                exit;
+            }
+            if ($type === 'percentage' && $value > 100) {
+                echo json_encode(['success' => false, 'message' => 'לא ניתן להגדיר יותר מ-100% השתתפות']);
+                exit;
+            }
+            if ($eventDate !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $eventDate)) {
+                echo json_encode(['success' => false, 'message' => 'תאריך לא תקין']);
+                exit;
+            }
+
             try {
                 $pdo->beginTransaction();
-                
-                $stmt = $pdo->prepare("INSERT INTO purchase_groups (name, description, owner_id) VALUES (?, ?, ?)");
-                $result = $stmt->execute([$_POST['name'], $_POST['description'], $user_id]);
-                
-                if ($result) {
-                    $group_id = $pdo->lastInsertId();
-                    
-                    if ($_POST['participation_type'] == 'percentage' && $_POST['participation_value'] > 100) {
-                        throw new Exception('לא ניתן להגדיר יותר מ-100% השתתפות');
-                    }
-                    
+
+                if ($featuresReady) {
                     $stmt = $pdo->prepare("
-                        INSERT INTO group_members (group_id, user_id, nickname, email, participation_type, participation_value) 
-                        VALUES (?, ?, ?, ?, ?, ?)
+                        INSERT INTO purchase_groups (name, description, owner_id, event_date, event_location)
+                        VALUES (?, ?, ?, ?, ?)
                     ");
                     $stmt->execute([
-                        $group_id, 
-                        $user_id, 
-                        $_SESSION['name'], 
-                        $_SESSION['email'],
-                        $_POST['participation_type'],
-                        $_POST['participation_value']
+                        $name,
+                        $description !== '' ? $description : null,
+                        $user_id,
+                        $eventDate !== '' ? $eventDate : null,
+                        $location !== '' ? $location : null,
                     ]);
-                    
-                    $pdo->commit();
-                    echo json_encode(['success' => true, 'group_id' => $group_id]);
                 } else {
-                    throw new Exception('שגיאה ביצירת הקבוצה');
+                    $stmt = $pdo->prepare("
+                        INSERT INTO purchase_groups (name, description, owner_id) VALUES (?, ?, ?)
+                    ");
+                    $stmt->execute([$name, $description !== '' ? $description : null, $user_id]);
                 }
+
+                $group_id = $pdo->lastInsertId();
+
+                $stmt = $pdo->prepare("
+                    INSERT INTO group_members
+                        (group_id, user_id, nickname, email, participation_type, participation_value)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ");
+                $stmt->execute([
+                    $group_id, $user_id, $_SESSION['name'], $_SESSION['email'], $type, $value,
+                ]);
+
+                $pdo->commit();
+                echo json_encode(['success' => true, 'group_id' => (int)$group_id]);
             } catch (Exception $e) {
                 $pdo->rollBack();
-                echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+                error_log("createGroup failed: " . $e->getMessage());
+                echo json_encode(['success' => false, 'message' => 'יצירת האירוע נכשלה']);
             }
             exit;
-            
+
         case 'leaveGroup':
+            $group_id = intval($_POST['group_id'] ?? 0);
+
+            $stmt = $pdo->prepare("SELECT owner_id FROM purchase_groups WHERE id = ?");
+            $stmt->execute([$group_id]);
+            if ((int)$stmt->fetchColumn() === (int)$user_id) {
+                echo json_encode([
+                    'success' => false,
+                    'message' => 'מנהל האירוע אינו יכול לעזוב אותו',
+                ]);
+                exit;
+            }
+
             $stmt = $pdo->prepare("
                 SELECT COUNT(*) FROM group_purchases gp
                 JOIN group_members gm ON gp.member_id = gm.id
                 WHERE gm.group_id = ? AND gm.user_id = ?
             ");
-            $stmt->execute([$_POST['group_id'], $user_id]);
-            
+            $stmt->execute([$group_id, $user_id]);
+
             if ($stmt->fetchColumn() > 0) {
-                echo json_encode(['success' => false, 'message' => 'לא ניתן לעזוב קבוצה עם קניות פעילות']);
+                echo json_encode([
+                    'success' => false,
+                    'message' => 'לא ניתן לעזוב אירוע שרשומות על שמך בו קניות',
+                ]);
             } else {
-                $stmt = $pdo->prepare("UPDATE group_members SET is_active = 0 WHERE group_id = ? AND user_id = ?");
-                $result = $stmt->execute([$_POST['group_id'], $user_id]);
-                echo json_encode(['success' => $result]);
+                $stmt = $pdo->prepare("
+                    UPDATE group_members SET is_active = 0 WHERE group_id = ? AND user_id = ?
+                ");
+                echo json_encode(['success' => $stmt->execute([$group_id, $user_id])]);
             }
             exit;
 
         case 'respondInvitation':
-            $invitation_id = $_POST['invitation_id'];
-            $response = $_POST['response'];
-            
+            $invitation_id = intval($_POST['invitation_id'] ?? 0);
+            $response      = $_POST['response'] ?? '';
+
+            if (!in_array($response, ['accept', 'reject'], true)) {
+                echo json_encode(['success' => false, 'message' => 'תגובה לא תקינה']);
+                exit;
+            }
+
             try {
                 $pdo->beginTransaction();
-                
-                // קבל את פרטי ההזמנה
+
                 $stmt = $pdo->prepare("
-                    SELECT * FROM group_invitations 
+                    SELECT * FROM group_invitations
                     WHERE id = ? AND email = ? AND status = 'pending'
                 ");
                 $stmt->execute([$invitation_id, $_SESSION['email']]);
                 $invitation = $stmt->fetch(PDO::FETCH_ASSOC);
-                
+
                 if (!$invitation) {
                     throw new Exception('הזמנה לא נמצאה או כבר טופלה');
                 }
-                
+
                 if ($response === 'accept') {
-                    // בדיקה אם המשתמש כבר היה חבר בעבר
                     $stmt = $pdo->prepare("
-                        SELECT id FROM group_members 
-                        WHERE group_id = ? AND user_id = ?
+                        SELECT id FROM group_members WHERE group_id = ? AND user_id = ?
                     ");
                     $stmt->execute([$invitation['group_id'], $user_id]);
-                    $existingMember = $stmt->fetch();
-                    
-                    if ($existingMember) {
-                        // עדכון חבר קיים
+                    $existing = $stmt->fetch();
+
+                    if ($existing) {
                         $stmt = $pdo->prepare("
-                            UPDATE group_members 
-                            SET is_active = 1,
-                                nickname = ?,
-                                email = ?,
-                                participation_type = ?,
-                                participation_value = ?,
-                                joined_at = NOW()
+                            UPDATE group_members
+                            SET is_active = 1, nickname = ?, email = ?,
+                                participation_type = ?, participation_value = ?, joined_at = NOW()
                             WHERE id = ?
                         ");
                         $stmt->execute([
-                            $invitation['nickname'],
-                            $_SESSION['email'],
-                            $invitation['participation_type'],
-                            $invitation['participation_value'],
-                            $existingMember['id']
+                            $invitation['nickname'], $_SESSION['email'],
+                            $invitation['participation_type'], $invitation['participation_value'],
+                            $existing['id'],
                         ]);
                     } else {
-                        // הוספת חבר חדש
                         $stmt = $pdo->prepare("
-                            INSERT INTO group_members 
-                            (group_id, user_id, nickname, email, participation_type, participation_value) 
+                            INSERT INTO group_members
+                                (group_id, user_id, nickname, email, participation_type, participation_value)
                             VALUES (?, ?, ?, ?, ?, ?)
                         ");
                         $stmt->execute([
-                            $invitation['group_id'],
-                            $user_id,
-                            $invitation['nickname'],
-                            $_SESSION['email'],
-                            $invitation['participation_type'],
-                            $invitation['participation_value']
+                            $invitation['group_id'], $user_id,
+                            $invitation['nickname'], $_SESSION['email'],
+                            $invitation['participation_type'], $invitation['participation_value'],
                         ]);
                     }
                 }
-                
-                // עדכן סטטוס הזמנה
+
                 $stmt = $pdo->prepare("
-                    UPDATE group_invitations 
-                    SET status = ?, responded_at = NOW() 
-                    WHERE id = ?
+                    UPDATE group_invitations SET status = ?, responded_at = NOW() WHERE id = ?
                 ");
                 $stmt->execute([
-                    $response === 'accept' ? 'accepted' : 'rejected', 
-                    $invitation_id
+                    $response === 'accept' ? 'accepted' : 'rejected',
+                    $invitation_id,
                 ]);
-                
+
                 $pdo->commit();
-                echo json_encode(['success' => true]);
-                
+                echo json_encode([
+                    'success'  => true,
+                    'group_id' => $response === 'accept' ? (int)$invitation['group_id'] : null,
+                ]);
             } catch (Exception $e) {
                 $pdo->rollBack();
                 echo json_encode(['success' => false, 'message' => $e->getMessage()]);
             }
             exit;
+
+        default:
+            echo json_encode(['success' => false, 'message' => 'פעולה לא מוכרת']);
+            exit;
     }
 }
 
-// שליפת קבוצות המשתמש
+// ============================================================
+// שליפת נתונים
+// ============================================================
+
+// הסטטיסטיקות מחושבות ישירות במקום להישען על טבלת סיכום
+// שעלולה להיות לא מסונכרנת.
+$eventColumns = $featuresReady
+    ? "pg.event_date, pg.event_location, pg.status,
+       (SELECT COUNT(*) FROM shopping_items si
+        WHERE si.group_id = pg.id AND si.status <> 'bought') AS open_items"
+    : "NULL AS event_date, NULL AS event_location, 'active' AS status, 0 AS open_items";
+
 $stmt = $pdo->prepare("
-    SELECT 
-        pg.*,
+    SELECT
+        pg.id, pg.name, pg.description, pg.owner_id, pg.created_at,
+        $eventColumns,
         gm.nickname,
         gm.participation_type,
         gm.participation_value,
-        u.name as owner_name,
-        (pg.owner_id = ?) as is_owner,
-        gs.member_count,
-        gs.purchase_count,
-        gs.total_amount
+        u.name AS owner_name,
+        (pg.owner_id = ?) AS is_owner,
+        (SELECT COUNT(*) FROM group_members m2
+         WHERE m2.group_id = pg.id AND m2.is_active = 1) AS member_count,
+        (SELECT COUNT(*) FROM group_purchases p2
+         WHERE p2.group_id = pg.id) AS purchase_count,
+        (SELECT COALESCE(SUM(p3.amount), 0) FROM group_purchases p3
+         WHERE p3.group_id = pg.id) AS total_amount
     FROM purchase_groups pg
     JOIN group_members gm ON pg.id = gm.group_id
     JOIN users u ON pg.owner_id = u.id
-    LEFT JOIN group_statistics gs ON pg.id = gs.group_id
     WHERE gm.user_id = ? AND gm.is_active = 1 AND pg.is_active = 1
     ORDER BY pg.created_at DESC
 ");
 $stmt->execute([$user_id, $user_id]);
-$groups = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$allGroups = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// שליפת הזמנות ממתינות
+// אירועים פעילים לפני סגורים; בתוך הפעילים - הקרוב ביותר ראשון
+$activeGroups = [];
+$closedGroups = [];
+foreach ($allGroups as $group) {
+    if (($group['status'] ?? 'active') === 'closed') {
+        $closedGroups[] = $group;
+    } else {
+        $activeGroups[] = $group;
+    }
+}
+
+usort($activeGroups, function ($a, $b) {
+    $aDate = $a['event_date'] ?? null;
+    $bDate = $b['event_date'] ?? null;
+
+    // אירועים עם תאריך קודמים לאלה שבלי
+    if ($aDate && $bDate) return strcmp($aDate, $bDate);
+    if ($aDate) return -1;
+    if ($bDate) return 1;
+
+    return strcmp($b['created_at'], $a['created_at']);
+});
+
+// --- הזמנות ממתינות ---
 $stmt = $pdo->prepare("
-    SELECT gi.*, pg.name as group_name
+    SELECT gi.*, pg.name AS group_name
     FROM group_invitations gi
     JOIN purchase_groups pg ON gi.group_id = pg.id
-    WHERE gi.email = ? AND gi.status = 'pending'
+    WHERE gi.email = ? AND gi.status = 'pending' AND pg.is_active = 1
     ORDER BY gi.created_at DESC
 ");
 $stmt->execute([$_SESSION['email']]);
 $invitations = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+/**
+ * מציג את תאריך האירוע יחסית להיום.
+ */
+function eventDateLabel($date) {
+    if (empty($date)) {
+        return null;
+    }
+
+    $days = (int)floor((strtotime($date) - strtotime('today')) / 86400);
+    $formatted = date('d/m/Y', strtotime($date));
+
+    if ($days === 0)  return "$formatted · היום!";
+    if ($days === 1)  return "$formatted · מחר";
+    if ($days > 1)    return "$formatted · עוד $days ימים";
+
+    return $formatted;
+}
 ?>
 <!DOCTYPE html>
 <html dir="rtl" lang="he">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>קבוצות הרכישה שלי - <?php echo SITE_NAME; ?></title>
-    
-    <!-- Stylesheets -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="/family/css/dashboard.css">
+    <title>האירועים שלי - <?php echo SITE_NAME; ?></title>
 
-    <!-- PWA Meta Tags -->
-    <link rel="manifest" href="/family/manifest.json">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="<?php echo APP_BASE_PATH; ?>/css/dashboard.css">
+
+    <link rel="manifest" href="<?php echo APP_BASE_PATH; ?>/manifest.json">
     <meta name="theme-color" content="#667eea">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
 
-    <!-- Icons -->
-    <link rel="icon" type="image/png" sizes="32x32" href="/family/images/icons/ios/32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="/family/images/icons/ios/16.png">
-    <link rel="apple-touch-icon" sizes="180x180" href="/family/images/icons/ios/180.png">
-    <link rel="apple-touch-icon" sizes="152x152" href="/family/images/icons/ios/152.png">
-    <link rel="apple-touch-icon" sizes="120x120" href="/family/images/icons/ios/120.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="<?php echo APP_BASE_PATH; ?>/images/icons/ios/32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="<?php echo APP_BASE_PATH; ?>/images/icons/ios/16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="<?php echo APP_BASE_PATH; ?>/images/icons/ios/180.png">
 </head>
 <body>
-    <!-- Navigation Bar -->
     <nav class="navbar">
         <div class="navbar-container">
             <a href="dashboard.php" class="navbar-brand">
-                <i class="fas fa-users"></i>
-                קבוצות הרכישה שלי
+                <i class="fas fa-calendar-check"></i>
+                האירועים שלי
             </a>
             <div class="navbar-user">
                 <div class="user-info">
                     <div class="user-avatar">
                         <?php if (!empty($_SESSION['profile_picture'])): ?>
-                            <img src="<?php echo $_SESSION['profile_picture']; ?>" alt="Avatar">
+                            <img src="<?php echo htmlspecialchars($_SESSION['profile_picture']); ?>" alt="">
                         <?php else: ?>
-                            <?php echo mb_substr($_SESSION['name'], 0, 1); ?>
+                            <?php echo htmlspecialchars(mb_substr($_SESSION['name'], 0, 1)); ?>
                         <?php endif; ?>
                     </div>
                     <span class="user-name"><?php echo htmlspecialchars($_SESSION['name']); ?></span>
@@ -245,7 +336,10 @@ $invitations = $stmt->fetchAll(PDO::FETCH_ASSOC);
     </nav>
 
     <div class="container">
-        <!-- הזמנות ממתינות -->
+        <?php if (!$featuresReady): ?>
+            <?php renderMigrationNotice(); ?>
+        <?php endif; ?>
+
         <?php if (count($invitations) > 0): ?>
         <div class="invitations-section">
             <h2><i class="fas fa-envelope"></i> הזמנות ממתינות</h2>
@@ -254,18 +348,18 @@ $invitations = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <div class="invitation-card">
                     <h3><?php echo htmlspecialchars($invitation['group_name']); ?></h3>
                     <p>כינוי: <?php echo htmlspecialchars($invitation['nickname']); ?></p>
-                    <p>השתתפות: 
-                        <?php if ($invitation['participation_type'] == 'percentage'): ?>
+                    <p>השתתפות:
+                        <?php if ($invitation['participation_type'] === 'percentage'): ?>
                             <?php echo $invitation['participation_value']; ?>%
                         <?php else: ?>
                             ₪<?php echo number_format($invitation['participation_value'], 2); ?>
                         <?php endif; ?>
                     </p>
                     <div class="invitation-actions">
-                        <button class="btn-accept" onclick="respondInvitation(<?php echo $invitation['id']; ?>, 'accept')">
+                        <button class="btn-accept" onclick="respondInvitation(<?php echo (int)$invitation['id']; ?>, 'accept')">
                             <i class="fas fa-check"></i> קבל
                         </button>
-                        <button class="btn-reject" onclick="respondInvitation(<?php echo $invitation['id']; ?>, 'reject')">
+                        <button class="btn-reject" onclick="respondInvitation(<?php echo (int)$invitation['id']; ?>, 'reject')">
                             <i class="fas fa-times"></i> דחה
                         </button>
                     </div>
@@ -275,124 +369,99 @@ $invitations = $stmt->fetchAll(PDO::FETCH_ASSOC);
         </div>
         <?php endif; ?>
 
-        <!-- כפתור יצירת קבוצה חדשה -->
         <div class="create-group-section">
             <button class="btn-create-group" onclick="showCreateGroupModal()">
                 <i class="fas fa-plus-circle"></i>
-                צור קבוצת רכישה חדשה
+                צור אירוע חדש
             </button>
         </div>
 
-        <!-- רשימת קבוצות -->
         <div class="groups-section">
-            <h2><i class="fas fa-layer-group"></i> הקבוצות שלי</h2>
-            
-            <?php if (count($groups) == 0): ?>
+            <h2><i class="fas fa-calendar-day"></i> אירועים פעילים</h2>
+
+            <?php if (count($activeGroups) === 0): ?>
             <div class="no-groups">
-                <i class="fas fa-users-slash"></i>
-                <p>אין לך קבוצות רכישה פעילות</p>
-                <p>צור קבוצה חדשה או המתן להזמנה</p>
+                <i class="fas fa-calendar-plus"></i>
+                <p>אין לך אירועים פעילים</p>
+                <p>צור אירוע חדש או המתן להזמנה</p>
             </div>
             <?php else: ?>
             <div class="groups-grid">
-                <?php foreach ($groups as $group): ?>
-                <div class="group-card <?php echo $group['is_owner'] ? 'owner' : ''; ?>">
-                    <?php if ($group['is_owner']): ?>
-                    <div class="owner-badge">
-                        <i class="fas fa-crown"></i> מנהל
-                    </div>
-                    <?php endif; ?>
-                    
-                    <div class="group-header">
-                        <h3><?php echo htmlspecialchars($group['name']); ?></h3>
-                        <?php if ($group['description']): ?>
-                        <p class="group-description"><?php echo htmlspecialchars($group['description']); ?></p>
-                        <?php endif; ?>
-                    </div>
-                    
-                    <div class="group-stats">
-                        <div class="stat">
-                            <i class="fas fa-users"></i>
-                            <span><?php echo $group['member_count'] ?? 0; ?> חברים</span>
-                        </div>
-                        <div class="stat">
-                            <i class="fas fa-shopping-bag"></i>
-                            <span><?php echo $group['purchase_count'] ?? 0; ?> קניות</span>
-                        </div>
-                        <div class="stat">
-                            <i class="fas fa-shekel-sign"></i>
-                            <span>₪<?php echo number_format($group['total_amount'] ?? 0, 2); ?></span>
-                        </div>
-                    </div>
-                    
-                    <div class="group-info">
-                        <p><i class="fas fa-user"></i> מנהל: <?php echo htmlspecialchars($group['owner_name']); ?></p>
-                        <p><i class="fas fa-percentage"></i> החלק שלך: 
-                            <?php if ($group['participation_type'] == 'percentage'): ?>
-                                <?php echo $group['participation_value']; ?>%
-                            <?php else: ?>
-                                ₪<?php echo number_format($group['participation_value'], 2); ?>
-                            <?php endif; ?>
-                        </p>
-                    </div>
-                    
-                    <div class="group-actions">
-                        <a href="group.php?id=<?php echo $group['id']; ?>" class="btn-enter">
-                            <i class="fas fa-sign-in-alt"></i> כניסה לקבוצה
-                        </a>
-                        <?php if (!$group['is_owner']): ?>
-                        <button class="btn-leave" onclick="leaveGroup(<?php echo $group['id']; ?>)">
-                            <i class="fas fa-sign-out-alt"></i> עזוב
-                        </button>
-                        <?php endif; ?>
-                    </div>
-                </div>
+                <?php foreach ($activeGroups as $group): ?>
+                    <?php include 'includes/group_card.php'; ?>
                 <?php endforeach; ?>
             </div>
             <?php endif; ?>
         </div>
+
+        <?php if (count($closedGroups) > 0): ?>
+        <div class="groups-section closed-section">
+            <h2><i class="fas fa-box-archive"></i> אירועים שנסגרו</h2>
+            <div class="groups-grid">
+                <?php foreach ($closedGroups as $group): ?>
+                    <?php include 'includes/group_card.php'; ?>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <?php endif; ?>
     </div>
 
-    <!-- Modal ליצירת קבוצה -->
+    <!-- Modal ליצירת אירוע -->
     <div id="createGroupModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>יצירת קבוצת רכישה חדשה</h2>
+                <h2>יצירת אירוע חדש</h2>
                 <span class="close" onclick="closeCreateGroupModal()">&times;</span>
             </div>
             <form id="createGroupForm">
-                <?php echo csrf_field(); ?>
                 <div class="form-group">
-                    <label for="groupName">שם הקבוצה:</label>
-                    <input type="text" id="groupName" required>
+                    <label for="groupName">שם האירוע:</label>
+                    <input type="text" id="groupName" placeholder="לדוגמה: ראש השנה אצל סבתא" required>
                 </div>
                 <div class="form-group">
                     <label for="groupDescription">תיאור (אופציונלי):</label>
-                    <textarea id="groupDescription" rows="3"></textarea>
+                    <textarea id="groupDescription" rows="2"></textarea>
                 </div>
+                <?php if ($featuresReady): ?>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="groupEventDate">תאריך:</label>
+                        <input type="date" id="groupEventDate">
+                    </div>
+                    <div class="form-group">
+                        <label for="groupEventLocation">מיקום:</label>
+                        <input type="text" id="groupEventLocation" placeholder="אצל סבתא">
+                    </div>
+                </div>
+                <?php endif; ?>
                 <div class="form-group">
-                    <label>סוג השתתפות שלך:</label>
+                    <label>סוג ההשתתפות שלך:</label>
                     <div class="radio-group">
                         <label>
-                            <input type="radio" name="ownerParticipationType" value="percentage" checked onchange="toggleOwnerParticipationType()">
+                            <input type="radio" name="ownerParticipationType" value="percentage" checked
+                                   onchange="toggleOwnerParticipationType()">
                             אחוז
                         </label>
                         <label>
-                            <input type="radio" name="ownerParticipationType" value="fixed" onchange="toggleOwnerParticipationType()">
+                            <input type="radio" name="ownerParticipationType" value="fixed"
+                                   onchange="toggleOwnerParticipationType()">
                             סכום קבוע
                         </label>
                     </div>
                 </div>
                 <div class="form-group">
-                    <label for="ownerParticipationValue">ערך השתתפות שלך:</label>
+                    <label for="ownerParticipationValue">ערך ההשתתפות שלך:</label>
                     <div class="input-with-suffix">
-                        <input type="number" id="ownerParticipationValue" step="0.01" required>
+                        <input type="number" id="ownerParticipationValue" step="0.01" min="0.01" required>
                         <span id="ownerValueSuffix">%</span>
                     </div>
+                    <small class="form-hint">
+                        אפשר לשנות בהמשך, ויש כפתור "חלוקה שווה" בתוך האירוע
+                    </small>
                 </div>
                 <div class="modal-actions">
                     <button type="submit" class="btn-primary">
-                        <i class="fas fa-plus"></i> צור קבוצה
+                        <i class="fas fa-plus"></i> צור אירוע
                     </button>
                     <button type="button" class="btn-secondary" onclick="closeCreateGroupModal()">
                         ביטול
@@ -402,218 +471,23 @@ $invitations = $stmt->fetchAll(PDO::FETCH_ASSOC);
         </div>
     </div>
 
-    <!-- כפתור פתיחת פאנל דיבאג -->
-    <div style="position: fixed; bottom: 10px; left: 10px; z-index: 9999;">
-        <button onclick="window.open('/family/notification-debug.html', '_blank')" 
-                style="background: #667eea; color: white; border: none; padding: 10px 20px; 
-                       border-radius: 5px; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.2);">
-            🔧 פאנל דיבאג
-        </button>
-    </div>
-
-    <!-- Scripts -->
     <script>
-        // משתנים גלובליים
         window.APP_CONFIG = {
-            csrfToken: '<?php echo $_SESSION['csrf_token']; ?>',
-            userId: <?php echo $user_id; ?>,
-            userEmail: '<?php echo $_SESSION['email']; ?>',
-            basePath: '/family/'
+            csrfToken:     <?php echo json_encode($_SESSION['csrf_token']); ?>,
+            userId:        <?php echo (int)$user_id; ?>,
+            basePath:      <?php echo json_encode(APP_BASE_PATH); ?>,
+            featuresReady: <?php echo $featuresReady ? 'true' : 'false'; ?>
         };
-        
-        const csrfToken = window.APP_CONFIG.csrfToken;
-        const userEmail = window.APP_CONFIG.userEmail;
     </script>
-    
-    <!-- פונקציות התראות מתוקנות -->
-    <script src="/family/js/notification-system.js"></script>
-    
-    <!-- פונקציות Dashboard -->
-    <script>
-        // פונקציות Modal
-        function showCreateGroupModal() {
-            document.getElementById('createGroupModal').style.display = 'block';
-        }
-        
-        function closeCreateGroupModal() {
-            document.getElementById('createGroupModal').style.display = 'none';
-            document.getElementById('createGroupForm').reset();
-        }
-        
-        function toggleOwnerParticipationType() {
-            const type = document.querySelector('input[name="ownerParticipationType"]:checked').value;
-            const suffix = document.getElementById('ownerValueSuffix');
-            suffix.textContent = type === 'percentage' ? '%' : '₪';
-        }
-        
-        // יצירת קבוצה
-        document.getElementById('createGroupForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const participationType = document.querySelector('input[name="ownerParticipationType"]:checked').value;
-            const participationValue = parseFloat(document.getElementById('ownerParticipationValue').value);
-            
-            if (participationType === 'percentage' && participationValue > 100) {
-                alert('לא ניתן להגדיר יותר מ-100% השתתפות');
-                return;
-            }
-            
-            if (participationValue <= 0) {
-                alert('ערך ההשתתפות חייב להיות חיובי');
-                return;
-            }
-            
-            const formData = new FormData();
-            formData.append('action', 'createGroup');
-            formData.append('name', document.getElementById('groupName').value);
-            formData.append('description', document.getElementById('groupDescription').value);
-            formData.append('participation_type', participationType);
-            formData.append('participation_value', participationValue);
-            formData.append('csrf_token', csrfToken);
-            
-            fetch('dashboard.php', {
-                method: 'POST',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest'
-                },
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    showNotificationUniversal('הצלחה! 🎉', {
-                        body: 'הקבוצה נוצרה בהצלחה',
-                        icon: '/family/images/icons/android/android-launchericon-192-192.png'
-                    });
-                    setTimeout(() => {
-                        window.location.href = 'group.php?id=' + data.group_id;
-                    }, 1500);
-                } else {
-                    alert(data.message || 'שגיאה ביצירת הקבוצה');
-                }
-            });
-        });
-        
-        // עזיבת קבוצה
-        function leaveGroup(groupId) {
-            if (!confirm('האם אתה בטוח שברצונך לעזוב את הקבוצה?')) return;
-            
-            const formData = new FormData();
-            formData.append('action', 'leaveGroup');
-            formData.append('group_id', groupId);
-            formData.append('csrf_token', csrfToken);
-            
-            fetch('dashboard.php', {
-                method: 'POST',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest'
-                },
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    showNotificationUniversal('עזבת את הקבוצה', {
-                        body: 'עזבת את הקבוצה בהצלחה',
-                        icon: '/family/images/icons/android/android-launchericon-192-192.png'
-                    });
-                    setTimeout(() => location.reload(), 1500);
-                } else {
-                    alert(data.message || 'שגיאה בעזיבת הקבוצה');
-                }
-            });
-        }
-        
-        // תגובה להזמנה
-        function respondInvitation(invitationId, response) {
-            const formData = new FormData();
-            formData.append('action', 'respondInvitation');
-            formData.append('invitation_id', invitationId);
-            formData.append('response', response);
-            formData.append('csrf_token', csrfToken);
-            
-            fetch('dashboard.php', {
-                method: 'POST',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest'
-                },
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    const message = response === 'accept' ? 'הצטרפת לקבוצה!' : 'ההזמנה נדחתה';
-                    showNotificationUniversal(message, {
-                        body: 'הפעולה בוצעה בהצלחה',
-                        icon: '/family/images/icons/android/android-launchericon-192-192.png'
-                    });
-                    setTimeout(() => location.reload(), 1500);
-                } else {
-                    alert('שגיאה בטיפול בהזמנה');
-                }
-            });
-        }
-        
-        // סגירת Modal בלחיצה מחוץ לו
-        window.onclick = function(event) {
-            const modal = document.getElementById('createGroupModal');
-            if (event.target == modal) {
-                closeCreateGroupModal();
-            }
-        }
-        
-        // בדיקת התראות מהשרת
-        async function checkServerNotifications() {
-            try {
-                const response = await fetch('/family/api/simple-notifications.php?action=get-pending');
-                const data = await response.json();
-                
-                if (data.success && data.notifications && data.notifications.length > 0) {
-                    for (const notif of data.notifications) {
-                        await showNotificationUniversal(notif.title || 'התראה', {
-                            body: notif.body || '',
-                            icon: notif.icon || '/family/images/icons/android/android-launchericon-192-192.png',
-                            badge: '/family/images/icons/android/android-launchericon-96-96.png',
-                            vibrate: [200, 100, 200],
-                            tag: 'notif-' + Date.now()
-                        });
-                    }
-                }
-            } catch (error) {
-                console.error('Error checking notifications:', error);
-            }
-        }
-        
-        // הפעלה אוטומטית
-        window.addEventListener('load', () => {
-            // בקש הרשאות אם צריך
-            if ('Notification' in window && Notification.permission === 'default') {
-                setTimeout(() => {
-                    Notification.requestPermission().then(permission => {
-                        if (permission === 'granted') {
-                            showNotificationUniversal('ברוך הבא! 👋', {
-                                body: 'התראות הופעלו בהצלחה',
-                                icon: '/family/images/icons/android/android-launchericon-192-192.png'
-                            });
-                        }
-                    });
-                }, 3000);
-            }
-            
-            // בדוק התראות כל 30 שניות
-            setInterval(checkServerNotifications, 30000);
-            
-            // בדוק מיד
-            setTimeout(checkServerNotifications, 2000);
-        });
-    </script>
-    
-    <!-- Service Worker Registration -->
+    <script src="<?php echo APP_BASE_PATH; ?>/js/notification-system.js"></script>
+    <script src="<?php echo APP_BASE_PATH; ?>/js/dashboard.js"></script>
+
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/family/service-worker.js', {scope: '/family/'})
-                    .then(reg => console.log('Service Worker registered:', reg))
+                navigator.serviceWorker
+                    .register('<?php echo APP_BASE_PATH; ?>/service-worker.js',
+                              { scope: '<?php echo APP_BASE_PATH; ?>/' })
                     .catch(err => console.error('Service Worker registration failed:', err));
             });
         }

@@ -703,3 +703,74 @@ body {
         width: 100%;
     }
 }
+/* ============================================================
+   מנהל האירוע - תוספות לדשבורד
+   ============================================================ */
+
+.migration-notice {
+    background: #fff3cd;
+    border-right: 4px solid #ffc107;
+    color: #856404;
+    padding: 15px 20px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: flex-start;
+    gap: 15px;
+}
+
+.migration-notice i { font-size: 24px; margin-top: 3px; }
+.migration-notice p { margin-top: 5px; font-size: 14px; }
+
+.migration-notice code {
+    background: rgba(0,0,0,0.08);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.group-event-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 10px;
+    font-size: 13px;
+    color: #666;
+}
+
+.group-event-meta span {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.group-event-meta i { color: #667eea; }
+
+.group-card.closed { opacity: 0.75; }
+.group-card.closed:hover { opacity: 1; }
+
+.closed-note {
+    color: #6c757d !important;
+    font-weight: 600;
+}
+
+.closed-section h2 { opacity: 0.9; }
+
+.stat.highlight { color: #dc3545; font-weight: 600; }
+.stat.highlight i { color: #dc3545; }
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+}
+
+.form-hint {
+    display: block;
+    color: #888;
+    font-size: 13px;
+    margin-top: 5px;
+}
+
+@media (max-width: 600px) {
+    .form-row { grid-template-columns: 1fr; }
+}

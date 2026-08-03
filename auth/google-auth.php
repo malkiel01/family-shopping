@@ -1,7 +1,7 @@
 <?php
 // auth/google-auth.php - טיפול באימות Google
-session_start();
 require_once '../config.php';
+require_once '../includes/session.php';
 
 // הגדר כותרות JSON
 header('Content-Type: application/json');
@@ -131,9 +131,12 @@ try {
     $_SESSION['login_time'] = time();
     
     // החזרת תגובה
+    // מפנים ליעד שנשמר לפני ההתחברות (למשל קישור הזמנה)
+    $redirect = consumeLoginRedirect() ?: APP_BASE_PATH . '/dashboard.php';
+
     echo json_encode([
         'success' => true,
-        'redirect' => '../dashboard.php',
+        'redirect' => $redirect,
         'message' => 'התחברת בהצלחה'
     ]);
     

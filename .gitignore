@@ -10,6 +10,7 @@ composer.lock
 # Uploads
 uploads/*
 !uploads/.gitkeep
+!uploads/.htaccess
 
 # Cache
 cache/*
@@ -40,6 +41,8 @@ database.ini
 *.bak
 *.backup
 *.sql
+# מיגרציות הן חלק מהקוד ולא גיבוי
+!db/migrations/*.sql
 
 # Session files
 sessions/*

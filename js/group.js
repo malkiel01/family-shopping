@@ -1,598 +1,546 @@
-// js/group.js - גרסה סופית
+// js/group.js
+// כל הלוגיקה של דף האירוע
 
-// פונקציות בסיסיות
+const CONFIG = window.APP_CONFIG;
+
+// ============================================================
+// תשתית - קריאות לשרת
+// ============================================================
+
+/**
+ * שולח פעולה לשרת. מחזיר את גוף התשובה, או null אם נכשל
+ * (במקרה כזה כבר הוצגה הודעה למשתמש).
+ */
+async function callAction(action, fields = {}, options = {}) {
+    const formData = options.formData || new FormData();
+    formData.append('action', action);
+    formData.append('csrf_token', CONFIG.csrfToken);
+
+    for (const [key, value] of Object.entries(fields)) {
+        if (Array.isArray(value)) {
+            value.forEach(item => formData.append(key + '[]', item));
+        } else if (value !== null && value !== undefined) {
+            formData.append(key, value);
+        }
+    }
+
+    try {
+        const response = await fetch('group.php?id=' + CONFIG.groupId, {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (!data.success) {
+            alert(data.message || 'הפעולה נכשלה');
+            return null;
+        }
+
+        return data;
+    } catch (error) {
+        console.error('Action failed:', action, error);
+        alert('שגיאת תקשורת. נסה שוב');
+        return null;
+    }
+}
+
+/** מבצע פעולה ומרענן את הדף בהצלחה */
+async function callAndReload(action, fields = {}, options = {}) {
+    const data = await callAction(action, fields, options);
+    if (data) {
+        location.reload();
+    }
+    return data;
+}
+
+// ============================================================
+// כרטיסיות ו-Modals
+// ============================================================
+
 function showTab(tabName, element) {
-    document.querySelectorAll('.content').forEach(content => {
-        content.style.display = 'none';
-    });
-    document.querySelectorAll('.tab').forEach(tab => {
-        tab.classList.remove('active');
-    });
-    
+    document.querySelectorAll('.content').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+
     document.getElementById(tabName).style.display = 'block';
     element.classList.add('active');
 }
 
-// ניהול משתתפים
-function showAddMemberModal() {
-    document.getElementById('addMemberModal').style.display = 'block';
-    updatePercentageInfo();
+function openModal(id) {
+    const modal = document.getElementById(id);
+    if (modal) modal.style.display = 'block';
 }
 
+function closeModal(id) {
+    const modal = document.getElementById(id);
+    if (modal) modal.style.display = 'none';
+}
+
+window.onclick = function (event) {
+    if (!event.target.classList || !event.target.classList.contains('modal')) return;
+
+    if (event.target.id === 'inviteLinkModal') {
+        closeInviteLinkModal();
+    } else {
+        event.target.style.display = 'none';
+    }
+};
+
+document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape') {
+        document.querySelectorAll('.modal').forEach(modal => modal.style.display = 'none');
+    }
+});
+
+// ============================================================
+// משתתפים
+// ============================================================
+
+function showAddMemberModal() {
+    openModal('addMemberModal');
+    updatePercentageInfo();
+}
 function closeAddMemberModal() {
-    document.getElementById('addMemberModal').style.display = 'none';
+    closeModal('addMemberModal');
     document.getElementById('addMemberForm').reset();
 }
 
 function toggleParticipationType() {
     const type = document.querySelector('input[name="participationType"]:checked').value;
-    const suffix = document.getElementById('valueSuffix');
-    const info = document.getElementById('percentageInfo');
-    
-    suffix.textContent = type === 'percentage' ? '%' : '₪';
-    
-    if (type === 'percentage') {
-        info.style.display = 'block';
-        document.getElementById('memberValue').max = availablePercentage;
-    } else {
-        info.style.display = 'none';
-        document.getElementById('memberValue').removeAttribute('max');
-    }
+    document.getElementById('valueSuffix').textContent = type === 'percentage' ? '%' : '₪';
+    updatePercentageInfo();
 }
 
 function updatePercentageInfo() {
-    const type = document.querySelector('input[name="participationType"]:checked')?.value;
-    if (type === 'percentage') {
-        document.getElementById('percentageInfo').style.display = 'block';
-    }
+    const type = document.querySelector('input[name="participationType"]:checked').value;
+    const info = document.getElementById('percentageInfo');
+
+    info.textContent = type === 'percentage'
+        ? `נותרו ${CONFIG.availablePercentage}% זמינים להקצאה`
+        : 'סכום קבוע - המשתתף ישלם סכום זה ללא קשר לאחוזים';
 }
 
-// עריכת משתתף
 function editMember(memberId, type, value) {
     document.getElementById('editMemberId').value = memberId;
-    document.querySelector(`input[name="editParticipationType"][value="${type}"]`).checked = true;
     document.getElementById('editMemberValue').value = value;
+    document.querySelector(`input[name="editParticipationType"][value="${type}"]`).checked = true;
     toggleEditParticipationType();
-    document.getElementById('editMemberModal').style.display = 'block';
+    openModal('editMemberModal');
 }
 
 function closeEditMemberModal() {
-    document.getElementById('editMemberModal').style.display = 'none';
-    document.getElementById('editMemberForm').reset();
+    closeModal('editMemberModal');
 }
 
 function toggleEditParticipationType() {
     const type = document.querySelector('input[name="editParticipationType"]:checked').value;
-    const suffix = document.getElementById('editValueSuffix');
-    const info = document.getElementById('editPercentageInfo');
-    
-    suffix.textContent = type === 'percentage' ? '%' : '₪';
-    
-    if (type === 'percentage') {
-        info.textContent = `נותרו ${availablePercentage}% זמינים (בנוסף לערך הנוכחי)`;
-        info.style.display = 'block';
-    } else {
-        info.style.display = 'none';
-    }
+    document.getElementById('editValueSuffix').textContent = type === 'percentage' ? '%' : '₪';
+    document.getElementById('editPercentageInfo').textContent = type === 'percentage'
+        ? 'הערך הכולל של כל המשתתפים לא יכול לעבור 100%'
+        : 'סכום קבוע בשקלים';
 }
 
 function removeMember(memberId) {
-    if (!confirm('האם אתה בטוח שברצונך להסיר משתתף זה?')) return;
-    
-    const formData = new FormData();
-    formData.append('action', 'removeMember');
-    formData.append('member_id', memberId);
-    
-    fetch('group.php?id=' + groupId, {
-        method: 'POST',
-        headers: {
-            'X-Requested-With': 'XMLHttpRequest'
-        },
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            location.reload();
-        } else {
-            alert(data.message || 'שגיאה בהסרת המשתתף');
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('שגיאה בתקשורת עם השרת');
-    });
+    if (!confirm('להסיר את המשתתף מהאירוע?')) return;
+    callAndReload('removeMember', { member_id: memberId });
 }
 
-// ביטול הזמנה
+function splitEqually() {
+    if (!confirm('לחלק 100% שווה בשווה בין כל המשתתפים?\nההגדרות הנוכחיות יידרסו.')) return;
+    callAndReload('splitEqually');
+}
+
 function cancelInvitation(invitationId) {
-    if (!confirm('האם אתה בטוח שברצונך לבטל הזמנה זו?')) return;
-    
-    const formData = new FormData();
-    formData.append('action', 'cancelInvitation');
-    formData.append('invitation_id', invitationId);
-    
-    fetch('group.php?id=' + groupId, {
-        method: 'POST',
-        headers: {
-            'X-Requested-With': 'XMLHttpRequest'
-        },
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            location.reload();
-        } else {
-            alert(data.message || 'שגיאה בביטול ההזמנה');
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('שגיאה בתקשורת עם השרת');
-    });
+    if (!confirm('לבטל את ההזמנה?')) return;
+    callAndReload('cancelInvitation', { invitation_id: invitationId });
 }
 
-// ניהול קניות
+// ============================================================
+// קישור הזמנה
+// ============================================================
+
+// נדלק כשההזמנה נוצרה זה עתה - אז סגירת החלון צריכה לרענן
+let reloadOnInviteClose = false;
+
+function buildJoinUrl(token) {
+    return `${location.origin}${CONFIG.basePath}/join.php?token=${encodeURIComponent(token)}`;
+}
+
+function showInviteLink(token, message) {
+    const url = buildJoinUrl(token);
+
+    document.getElementById('inviteLinkInput').value = url;
+    document.getElementById('inviteLinkMessage').textContent =
+        message || 'שלחו את הקישור למי שהזמנתם כדי שיוכל להצטרף';
+    document.getElementById('inviteWhatsappLink').href =
+        'https://wa.me/?text=' + encodeURIComponent('הוזמנת לאירוע! להצטרפות: ' + url);
+
+    openModal('inviteLinkModal');
+}
+
+function closeInviteLinkModal() {
+    closeModal('inviteLinkModal');
+
+    if (reloadOnInviteClose) {
+        reloadOnInviteClose = false;
+        location.reload();
+    }
+}
+
+async function copyToClipboard(text) {
+    try {
+        await navigator.clipboard.writeText(text);
+        return true;
+    } catch (error) {
+        // דפדפנים ישנים / הקשר לא מאובטח
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+
+        let ok = false;
+        try {
+            ok = document.execCommand('copy');
+        } catch (e) {
+            ok = false;
+        }
+
+        document.body.removeChild(textarea);
+        return ok;
+    }
+}
+
+async function copyInviteLink() {
+    const ok = await copyToClipboard(document.getElementById('inviteLinkInput').value);
+    alert(ok ? 'הקישור הועתק' : 'לא הצלחנו להעתיק. סמנו את הקישור והעתיקו ידנית');
+}
+
+// ============================================================
+// בורר משתתפים בקנייה
+// ============================================================
+
+function toggleAllParticipants(prefix, checked) {
+    document.querySelectorAll('.' + prefix + '-participant')
+        .forEach(checkbox => { checkbox.checked = checked; });
+}
+
+/** מחזיר את מזהי מי ש*לא* מסומן - אלו ההחרגות */
+function getExcludedIds(prefix) {
+    return Array.from(document.querySelectorAll('.' + prefix + '-participant'))
+        .filter(checkbox => !checkbox.checked)
+        .map(checkbox => checkbox.value);
+}
+
+function setParticipants(prefix, excludedIds) {
+    const excluded = (excludedIds || []).map(String);
+    document.querySelectorAll('.' + prefix + '-participant')
+        .forEach(checkbox => { checkbox.checked = !excluded.includes(checkbox.value); });
+}
+
+// ============================================================
+// קניות
+// ============================================================
+
 function showAddPurchaseModal() {
-    document.getElementById('addPurchaseModal').style.display = 'block';
+    openModal('addPurchaseModal');
 }
 
 function closeAddPurchaseModal() {
-    document.getElementById('addPurchaseModal').style.display = 'none';
+    closeModal('addPurchaseModal');
     document.getElementById('addPurchaseForm').reset();
-    const preview = document.getElementById('imagePreview');
-    if (preview) {
-        preview.style.display = 'none';
-    }
+    document.getElementById('purchaseItemId').value = '';
+    document.getElementById('imagePreview').style.display = 'none';
+    toggleAllParticipants('add', true);
 }
 
 function previewImage(event) {
     const file = event.target.files[0];
-    if (!file) return;
-    
+    const preview = document.getElementById('imagePreview');
+
+    if (!file) {
+        preview.style.display = 'none';
+        return;
+    }
+
     const reader = new FileReader();
-    reader.onload = function(e) {
-        const preview = document.getElementById('imagePreview');
+    reader.onload = e => {
         preview.src = e.target.result;
         preview.style.display = 'block';
     };
     reader.readAsDataURL(file);
 }
 
-function deletePurchase(purchaseId) {
-    if (!confirm('האם אתה בטוח שברצונך למחוק קנייה זו?')) return;
-    
-    const formData = new FormData();
-    formData.append('action', 'deletePurchase');
-    formData.append('purchase_id', purchaseId);
-    
-    fetch('group.php?id=' + groupId, {
-        method: 'POST',
-        headers: {
-            'X-Requested-With': 'XMLHttpRequest'
-        },
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            location.reload();
-        } else {
-            alert(data.message || 'שגיאה במחיקת הקנייה');
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('שגיאה בתקשורת עם השרת');
-    });
+/** "קניתי" מתוך רשימת הפריטים - פותח את טופס הקנייה עם הפריט מקושר */
+function buyItem(itemId, title) {
+    showAddPurchaseModal();
+    document.getElementById('purchaseItemId').value = itemId;
+    document.getElementById('purchaseDescription').value = title;
+    document.getElementById('purchaseAmount').focus();
 }
 
-// הצגת תמונה במודל
+function editPurchase(purchase) {
+    document.getElementById('editPurchaseId').value = purchase.id;
+    document.getElementById('editPurchaseAmount').value = purchase.amount;
+    document.getElementById('editPurchaseDescription').value = purchase.description || '';
+    setParticipants('edit', purchase.excluded);
+    openModal('editPurchaseModal');
+}
+
+function closeEditPurchaseModal() {
+    closeModal('editPurchaseModal');
+}
+
+function deletePurchase(purchaseId) {
+    if (!confirm('למחוק את הקנייה?')) return;
+    callAndReload('deletePurchase', { purchase_id: purchaseId });
+}
+
 function showImageModal(src) {
-    const modal = document.getElementById('imageModal');
-    const img = document.getElementById('modalImage');
-    if (modal && img) {
-        img.src = src;
-        modal.style.display = 'block';
-    }
+    document.getElementById('modalImage').src = src;
+    openModal('imageModal');
 }
 
 function closeImageModal() {
-    const modal = document.getElementById('imageModal');
-    if (modal) {
-        modal.style.display = 'none';
-    }
+    closeModal('imageModal');
 }
 
-// אתחול Event Listeners
-document.addEventListener('DOMContentLoaded', function() {
-    // הוספת משתתף
+// ============================================================
+// רשימת הקניות
+// ============================================================
+
+function showItemModal() {
+    document.getElementById('itemModalTitle').textContent = 'הוספת פריט';
+    document.getElementById('itemForm').reset();
+    document.getElementById('itemId').value = '';
+    openModal('itemModal');
+    document.getElementById('itemTitle').focus();
+}
+
+function editItem(item) {
+    document.getElementById('itemModalTitle').textContent = 'עריכת פריט';
+    document.getElementById('itemId').value = item.id;
+    document.getElementById('itemTitle').value = item.title || '';
+    document.getElementById('itemQuantity').value = item.quantity || '';
+    document.getElementById('itemNotes').value = item.notes || '';
+    openModal('itemModal');
+}
+
+function closeItemModal() {
+    closeModal('itemModal');
+}
+
+function setItemStatus(itemId, status) {
+    callAndReload('setItemStatus', { item_id: itemId, status: status });
+}
+
+function deleteItem(itemId) {
+    if (!confirm('למחוק את הפריט מהרשימה?')) return;
+    callAndReload('deleteItem', { item_id: itemId });
+}
+
+// ============================================================
+// התחשבנות
+// ============================================================
+
+function markSettled(fromMemberId, toMemberId, amount) {
+    if (!confirm(`לרשום שההעברה של ₪${amount} בוצעה?`)) return;
+
+    callAndReload('addSettlement', {
+        from_member_id: fromMemberId,
+        to_member_id: toMemberId,
+        amount: amount
+    });
+}
+
+function deleteSettlement(settlementId) {
+    if (!confirm('לבטל את רישום ההתחשבנות?')) return;
+    callAndReload('deleteSettlement', { settlement_id: settlementId });
+}
+
+// ============================================================
+// האירוע
+// ============================================================
+
+function showEventModal() {
+    openModal('eventModal');
+}
+
+function closeEventModal() {
+    closeModal('eventModal');
+}
+
+function closeEvent() {
+    if (!confirm('לסגור את האירוע?\nלא יהיה ניתן להוסיף קניות או לשנות פרטים עד שייפתח מחדש.')) return;
+    callAndReload('closeEvent');
+}
+
+function reopenEvent() {
+    callAndReload('reopenEvent');
+}
+
+async function shareSummary() {
+    const text = CONFIG.summaryText;
+
+    if (navigator.share) {
+        try {
+            await navigator.share({ text: text });
+            return;
+        } catch (error) {
+            if (error.name === 'AbortError') return;
+        }
+    }
+
+    window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank', 'noopener');
+}
+
+// ============================================================
+// טפסים
+// ============================================================
+
+document.addEventListener('DOMContentLoaded', function () {
     const addMemberForm = document.getElementById('addMemberForm');
-    if (addMemberForm && isOwner) {
-        addMemberForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const participationType = document.querySelector('input[name="participationType"]:checked').value;
-            const participationValue = parseFloat(document.getElementById('memberValue').value);
-            
-            // בדיקת תקינות בצד הלקוח
-            if (participationType === 'percentage' && participationValue > availablePercentage) {
-                alert(`לא ניתן להוסיף יותר מ-${availablePercentage}% זמינים`);
+    if (addMemberForm) {
+        addMemberForm.addEventListener('submit', async function (event) {
+            event.preventDefault();
+
+            const type = document.querySelector('input[name="participationType"]:checked').value;
+            const value = parseFloat(document.getElementById('memberValue').value);
+
+            if (!(value > 0)) {
+                alert('ערך ההשתתפות חייב להיות חיובי');
                 return;
             }
-            
-            const formData = new FormData();
-            formData.append('action', 'addMember');
-            formData.append('email', document.getElementById('memberEmail').value);
-            formData.append('nickname', document.getElementById('memberNickname').value);
-            formData.append('participation_type', participationType);
-            formData.append('participation_value', participationValue);
-            
-            // fetch('group.php?id=' + groupId, {
-            //     method: 'POST',
-            //     headers: {
-            //         'X-Requested-With': 'XMLHttpRequest'
-            //     },
-            //     body: formData
-            // })
-            // .then(response => {
-            //     // קרא את התגובה כטקסט תחילה
-            //     return response.text().then(text => {
-            //         // הדפס לקונסול לדיבאג
-            //         console.log('Raw response:', text);
-                    
-            //         // נסה לפרסר ל-JSON
-            //         try {
-            //             return JSON.parse(text);
-            //         } catch (e) {
-            //             // אם לא הצליח לפרסר, הצג את הטקסט
-            //             console.error('Failed to parse JSON:', text);
-                        
-            //             // בדוק אם זו שגיאת PHP
-            //             if (text.includes('Fatal error') || text.includes('Warning') || text.includes('Parse error')) {
-            //                 throw new Error('PHP Error: ' + text.substring(0, 200));
-            //             }
-                        
-            //             // אם זה ריק
-            //             if (text.trim() === '') {
-            //                 throw new Error('Empty response from server');
-            //             }
-                        
-            //             throw new Error('Invalid JSON response');
-            //         }
-            //     });
-            // })
-            // .then(data => {
-            //     if (data.success) {
-            //         // צור פופאפ פשוט
-            //         const popup = document.createElement('div');
-            //         popup.style.cssText = `
-            //             position: fixed;
-            //             top: 50%;
-            //             left: 50%;
-            //             transform: translate(-50%, -50%);
-            //             background: white;
-            //             border-radius: 15px;
-            //             padding: 30px;
-            //             box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            //             z-index: 10000;
-            //             text-align: center;
-            //         `;
-                    
-            //         const icon = data.notification_sent ? '✅' : '⚠️';
-            //         const color = data.notification_sent ? '#28a745' : '#ffc107';
-                    
-            //         popup.innerHTML = `
-            //             <div style="font-size: 60px; margin-bottom: 20px;">${icon}</div>
-            //             <h2 style="color: #333; margin-bottom: 15px;">הזמנה נשלחה!</h2>
-            //             <p style="color: #666; font-size: 16px;">
-            //                 ${data.message}
-            //             </p>
-            //             <button onclick="this.parentElement.remove(); location.reload();" 
-            //                     style="background: ${color}; color: white; border: none; 
-            //                         padding: 12px 30px; border-radius: 8px; 
-            //                         font-size: 16px; cursor: pointer; margin-top: 20px;">
-            //                 סגור
-            //             </button>
-            //         `;
-                    
-            //         document.body.appendChild(popup);
-            //         closeAddMemberModal();
-                    
-            //     } else {
-            //         alert(data.message || 'שגיאה בהוספת המשתתף');
-            //     }
-            // })
-            // .catch(error => {
-            //     console.error('Error details:', error);
-                
-            //     // הצג הודעה ידידותית למשתמש
-            //     alert('אירעה שגיאה בהוספת המשתתף. אנא נסה שוב.\n\nפרטי השגיאה:\n' + error.message);
-            // });
+            if (type === 'percentage' && value > CONFIG.availablePercentage) {
+                alert(`נותרו רק ${CONFIG.availablePercentage}% להקצאה`);
+                return;
+            }
 
-            // -------------------------
-
-            fetch('group.php?id=' + groupId, {
-                method: 'POST',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest'
-                },
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-            //         // רענון הדף בשקט אחרי הצלחה
-            //         location.reload();
-                    // הצג פופאפ מפורט
-                    showNotificationPopup(data);
-                    
-                    // רענן את הדף אחרי 3 שניות
-                    setTimeout(() => {
-                        location.reload();
-                    }, 3000);
-                } else {
-                    // הצגת הודעת שגיאה רק במקרה של כישלון
-                    alert(data.message || 'שגיאה בהוספת המשתתף');
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('שגיאה בתקשורת עם השרת: ' + error.message);
+            const data = await callAction('addMember', {
+                email: document.getElementById('memberEmail').value,
+                nickname: document.getElementById('memberNickname').value,
+                participation_type: type,
+                participation_value: value
             });
+
+            if (!data) return;
+
+            closeAddMemberModal();
+
+            // מציגים את קישור ההצטרפות - זה מה שמאפשר להזמין
+            // גם מי שעוד לא רשום במערכת
+            reloadOnInviteClose = true;
+            const url = new URL(data.invitation_link);
+            showInviteLink(url.searchParams.get('token'), data.message);
         });
     }
 
-    // פונקציה להצגת פופאפ מפורט
-    function showNotificationPopup(data) {
-        // יצירת אלמנט המודל
-        const modal = document.createElement('div');
-        modal.style.cssText = `
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0,0,0,0.6);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 10000;
-            animation: fadeIn 0.3s;
-        `;
-        
-        // תוכן המודל
-        const content = document.createElement('div');
-        content.style.cssText = `
-            background: white;
-            border-radius: 15px;
-            padding: 0;
-            max-width: 500px;
-            width: 90%;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            animation: slideUp 0.5s;
-            overflow: hidden;
-        `;
-        
-        // כותרת
-        const header = document.createElement('div');
-        header.style.cssText = `
-            background: ${data.notification_sent ? 
-                'linear-gradient(135deg, #28a745 0%, #20c997 100%)' : 
-                'linear-gradient(135deg, #ffc107 0%, #ff9800 100%)'};
-            color: white;
-            padding: 20px;
-            text-align: center;
-        `;
-        
-        const icon = data.notification_sent ? '✅' : '⚠️';
-        const title = data.notification_sent ? 
-            'הזמנה והתראה נשלחו בהצלחה!' : 
-            'הזמנה נשלחה (ללא התראה)';
-        
-        header.innerHTML = `
-            <div style="font-size: 50px; margin-bottom: 10px;">${icon}</div>
-            <h2 style="margin: 0; font-size: 20px;">${title}</h2>
-        `;
-        
-        // גוף ההודעה
-        const body = document.createElement('div');
-        body.style.cssText = 'padding: 20px;';
-        
-        let bodyHTML = `
-            <div style="margin-bottom: 20px;">
-                <p style="color: #333; font-size: 16px; margin: 10px 0;">
-                    ${data.message}
-                </p>
-            </div>
-        `;
-        
-        // פרטים נוספים
-        if (data.details) {
-            bodyHTML += `
-                <div style="background: #f8f9fa; border-radius: 10px; padding: 15px; margin-bottom: 15px;">
-                    <h4 style="color: #667eea; margin: 0 0 10px 0;">📊 פרטי ההזמנה:</h4>
-                    <ul style="margin: 0; padding-right: 20px; color: #666;">
-                        <li>מזהה הזמנה: #${data.details.invitation_id}</li>
-                        ${data.details.user_exists ? 
-                            `<li>משתמש רשום: ${data.details.user_name || 'כן'}</li>` : 
-                            '<li>משתמש חדש (טרם נרשם)</li>'}
-                    </ul>
-                </div>
-            `;
-            
-            if (data.notification_sent && data.details.notification_details) {
-                bodyHTML += `
-                    <div style="background: #d4edda; border-radius: 10px; padding: 15px; margin-bottom: 15px;">
-                        <h4 style="color: #28a745; margin: 0 0 10px 0;">🔔 פרטי ההתראה:</h4>
-                        <ul style="margin: 0; padding-right: 20px; color: #155724;">
-                            ${data.details.notification_details.queue_id ? 
-                                `<li>מזהה תור: #${data.details.notification_details.queue_id}</li>` : ''}
-                            ${data.details.notification_details.immediately_sent ? 
-                                '<li>סטטוס: נשלחה מיידית!</li>' : 
-                                '<li>סטטוס: ממתינה בתור</li>'}
-                        </ul>
-                    </div>
-                `;
-            }
-            
-            if (data.details.saved_in_tables && data.details.saved_in_tables.length > 0) {
-                bodyHTML += `
-                    <div style="background: #d1ecf1; border-radius: 10px; padding: 15px;">
-                        <h4 style="color: #0c5460; margin: 0 0 10px 0;">💾 נשמר בטבלאות:</h4>
-                        <ul style="margin: 0; padding-right: 20px; color: #0c5460;">
-                            ${data.details.saved_in_tables.map(table => 
-                                `<li>${table}</li>`
-                            ).join('')}
-                        </ul>
-                    </div>
-                `;
-            }
-        }
-        
-        // מידע דיבאג (רק אם יש)
-        if (data.debug && window.location.search.includes('debug=1')) {
-            bodyHTML += `
-                <details style="margin-top: 15px;">
-                    <summary style="cursor: pointer; color: #666; font-size: 14px;">
-                        🔍 מידע דיבאג (למפתחים)
-                    </summary>
-                    <pre style="background: #263238; color: #aed581; padding: 10px; 
-                        border-radius: 5px; margin-top: 10px; font-size: 12px; 
-                        overflow-x: auto; direction: ltr;">
-    ${JSON.stringify(data.debug, null, 2)}
-                    </pre>
-                </details>
-            `;
-        }
-        
-        body.innerHTML = bodyHTML;
-        
-        // כפתור סגירה
-        const footer = document.createElement('div');
-        footer.style.cssText = 'padding: 20px; text-align: center;';
-        footer.innerHTML = `
-            <button onclick="this.closest('[style*=fixed]').remove()" 
-                    style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                        color: white; border: none; padding: 12px 30px;
-                        border-radius: 8px; font-size: 16px; cursor: pointer;
-                        font-weight: 600;">
-                סגור
-            </button>
-        `;
-        
-        // הרכבת המודל
-        content.appendChild(header);
-        content.appendChild(body);
-        content.appendChild(footer);
-        modal.appendChild(content);
-        
-        // הוספה לדף
-        document.body.appendChild(modal);
-        
-        // אנימציות CSS
-        const style = document.createElement('style');
-        style.textContent = `
-            @keyframes fadeIn {
-                from { opacity: 0; }
-                to { opacity: 1; }
-            }
-            @keyframes slideUp {
-                from { transform: translateY(50px); opacity: 0; }
-                to { transform: translateY(0); opacity: 1; }
-            }
-        `;
-        document.head.appendChild(style);
-    }
-
-    // הוסף גם console.log לדיבאג
-    console.log('Group.js loaded with notification popup support');
-
-    
-    // עריכת משתתף
     const editMemberForm = document.getElementById('editMemberForm');
-    if (editMemberForm && isOwner) {
-        editMemberForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const formData = new FormData();
-            formData.append('action', 'editMember');
-            formData.append('member_id', document.getElementById('editMemberId').value);
-            formData.append('participation_type', document.querySelector('input[name="editParticipationType"]:checked').value);
-            formData.append('participation_value', document.getElementById('editMemberValue').value);
-            
-            fetch('group.php?id=' + groupId, {
-                method: 'POST',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest'
-                },
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    location.reload();
-                } else {
-                    alert(data.message || 'שגיאה בעדכון המשתתף');
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('שגיאה בתקשורת עם השרת');
+    if (editMemberForm) {
+        editMemberForm.addEventListener('submit', function (event) {
+            event.preventDefault();
+
+            const value = parseFloat(document.getElementById('editMemberValue').value);
+            if (!(value > 0)) {
+                alert('ערך ההשתתפות חייב להיות חיובי');
+                return;
+            }
+
+            callAndReload('editMember', {
+                member_id: document.getElementById('editMemberId').value,
+                participation_type: document.querySelector('input[name="editParticipationType"]:checked').value,
+                participation_value: value
             });
         });
     }
-    
-    // הוספת קנייה
+
     const addPurchaseForm = document.getElementById('addPurchaseForm');
     if (addPurchaseForm) {
-        addPurchaseForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const memberId = document.getElementById('purchaseMember').value;
-            if (!memberId && isOwner) {
-                alert('יש לבחור משתתף');
+        addPurchaseForm.addEventListener('submit', function (event) {
+            event.preventDefault();
+
+            const amount = parseFloat(document.getElementById('purchaseAmount').value);
+            if (!(amount > 0)) {
+                alert('סכום הקנייה חייב להיות חיובי');
                 return;
             }
-            
-            const formData = new FormData();
-            formData.append('action', 'addPurchase');
-            formData.append('member_id', memberId);
-            formData.append('amount', document.getElementById('purchaseAmount').value);
-            formData.append('description', document.getElementById('purchaseDescription').value);
-            
-            const imageFile = document.getElementById('purchaseImage').files[0];
-            if (imageFile) {
-                formData.append('image', imageFile);
+
+            const memberId = document.getElementById('purchaseMember').value;
+            if (!memberId) {
+                alert('יש לבחור מי שילם');
+                return;
             }
-            
-            fetch('group.php?id=' + groupId, {
-                method: 'POST',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest'
-                },
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    location.reload();
-                } else {
-                    alert(data.message || 'שגיאה בהוספת הקנייה');
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('שגיאה בתקשורת עם השרת');
+
+            const formData = new FormData();
+            const imageInput = document.getElementById('purchaseImage');
+            if (imageInput && imageInput.files[0]) {
+                formData.append('image', imageInput.files[0]);
+            }
+
+            callAndReload('addPurchase', {
+                member_id: memberId,
+                amount: amount,
+                description: document.getElementById('purchaseDescription').value,
+                item_id: document.getElementById('purchaseItemId').value || 0,
+                excluded_ids: getExcludedIds('add')
+            }, { formData: formData });
+        });
+    }
+
+    const editPurchaseForm = document.getElementById('editPurchaseForm');
+    if (editPurchaseForm) {
+        editPurchaseForm.addEventListener('submit', function (event) {
+            event.preventDefault();
+
+            const amount = parseFloat(document.getElementById('editPurchaseAmount').value);
+            if (!(amount > 0)) {
+                alert('סכום הקנייה חייב להיות חיובי');
+                return;
+            }
+
+            callAndReload('updatePurchase', {
+                purchase_id: document.getElementById('editPurchaseId').value,
+                amount: amount,
+                description: document.getElementById('editPurchaseDescription').value,
+                excluded_ids: getExcludedIds('edit')
             });
         });
     }
-    
-    // סגירת modals בלחיצה מחוץ להם
-    window.onclick = function(event) {
-        if (event.target.classList.contains('modal')) {
-            event.target.style.display = 'none';
-        }
+
+    const itemForm = document.getElementById('itemForm');
+    if (itemForm) {
+        itemForm.addEventListener('submit', function (event) {
+            event.preventDefault();
+
+            const itemId = document.getElementById('itemId').value;
+            const fields = {
+                title: document.getElementById('itemTitle').value,
+                quantity: document.getElementById('itemQuantity').value,
+                notes: document.getElementById('itemNotes').value
+            };
+
+            if (itemId) {
+                fields.item_id = itemId;
+                callAndReload('updateItem', fields);
+            } else {
+                callAndReload('addItem', fields);
+            }
+        });
+    }
+
+    const eventForm = document.getElementById('eventForm');
+    if (eventForm) {
+        eventForm.addEventListener('submit', function (event) {
+            event.preventDefault();
+
+            callAndReload('updateEvent', {
+                name: document.getElementById('eventName').value,
+                description: document.getElementById('eventDescription').value,
+                event_date: document.getElementById('eventDate').value,
+                event_location: document.getElementById('eventLocation').value
+            });
+        });
     }
 });
