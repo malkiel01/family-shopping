@@ -1,5 +1,5 @@
 <?php
-require_once '/home/user/family-shopping/includes/group_calculations.php';
+require_once __DIR__ . '/../includes/group_calculations.php';
 
 $pass = 0; $fail = 0;
 function check($label, $actual, $expected, $tol = 0.01) {
