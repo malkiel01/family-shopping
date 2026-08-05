@@ -31,6 +31,16 @@ RewriteRule ^offline\.html$ - [L]
 
 # === הגנות בסיסיות ===
 
+# כל קובץ שמתחיל בנקודה. הכלל הזה חוסם את .env, את .vapid-keys.json
+# שמכיל את המפתח הפרטי של ההתראות, ואת גיבויי .htaccess.
+# הכלל חל על שמות קבצים בלבד, ולכן .well-known ממשיך לעבוד.
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+# תיקיות פנימיות שאין שום סיבה לגשת אליהן מהדפדפן
+RewriteRule ^(tests|cron)/ - [F,L]
+
 # הגנה על קבצי ENV
 <Files .env>
     Order allow,deny
