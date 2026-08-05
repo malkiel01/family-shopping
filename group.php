@@ -444,16 +444,19 @@ $canEdit = !$is_closed;
                             <?php endif; ?>
                         </p>
                     </div>
-                    <?php if ($is_owner && $canEdit && $member['user_id'] != $group['owner_id']): ?>
+                    <?php if ($is_owner && $canEdit): ?>
                     <div class="member-actions">
                         <button class="btn-edit" title="ערוך"
                                 onclick="editMember(<?php echo (int)$member['id']; ?>, '<?php echo htmlspecialchars($member['participation_type'], ENT_QUOTES); ?>', <?php echo (float)$member['participation_value']; ?>)">
                             <i class="fas fa-edit"></i>
                         </button>
+                        <?php // את המנהל אי אפשר להסיר מהאירוע שלו, אבל כן אפשר לערוך את חלקו ?>
+                        <?php if ($member['user_id'] != $group['owner_id']): ?>
                         <button class="btn-remove" title="הסר"
                                 onclick="removeMember(<?php echo (int)$member['id']; ?>)">
                             <i class="fas fa-times"></i>
                         </button>
+                        <?php endif; ?>
                     </div>
                     <?php endif; ?>
                 </div>
