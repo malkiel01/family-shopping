@@ -121,6 +121,10 @@ try {
         $user_name = $name;
     }
     
+    // מזהה session חדש, כדי שמזהה שהיה ידוע לפני ההתחברות
+    // לא יישאר תקף אחריה
+    regenerateSessionAfterLogin();
+
     // הגדרת סשן
     $_SESSION['user_id'] = $user_id;
     $_SESSION['username'] = $username;

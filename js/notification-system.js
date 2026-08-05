@@ -108,28 +108,43 @@ function showInPageBanner(notification) {
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     `;
     
-    banner.innerHTML = `
-        <div style="display: flex; align-items: start; gap: 10px;">
-            <div style="font-size: 24px;">🔔</div>
-            <div style="flex: 1;">
-                <h4 style="margin: 0 0 5px 0; color: #333; font-size: 16px;">
-                    ${notification.title || 'התראה'}
-                </h4>
-                <p style="margin: 0; color: #666; font-size: 14px; line-height: 1.4;">
-                    ${notification.body || ''}
-                </p>
-                <div style="margin-top: 8px; font-size: 12px; color: #999;">
-                    ${new Date().toLocaleTimeString('he-IL')}
-                </div>
-            </div>
-            <button onclick="this.parentElement.parentElement.remove()" 
-                    style="background: none; border: none; font-size: 20px; 
-                           color: #999; cursor: pointer; padding: 0; margin: 0;">
-                ×
-            </button>
-        </div>
-    `;
-    
+    // הכותרת והגוף של ההתראה מגיעים משמות שמשתמשים הקלידו - שם
+    // קבוצה, שם משתתף. לכן הם נכנסים כטקסט דרך textContent ולא כ-HTML.
+    // הרכבה עם innerHTML כאן הייתה מאפשרת הרצת קוד אצל הנמען.
+    const row = document.createElement('div');
+    row.style.cssText = 'display: flex; align-items: start; gap: 10px;';
+
+    const icon = document.createElement('div');
+    icon.style.fontSize = '24px';
+    icon.textContent = '🔔';
+
+    const content = document.createElement('div');
+    content.style.flex = '1';
+
+    const title = document.createElement('h4');
+    title.style.cssText = 'margin: 0 0 5px 0; color: #333; font-size: 16px;';
+    title.textContent = notification.title || 'התראה';
+
+    const body = document.createElement('p');
+    body.style.cssText = 'margin: 0; color: #666; font-size: 14px; line-height: 1.4;';
+    body.textContent = notification.body || '';
+
+    const time = document.createElement('div');
+    time.style.cssText = 'margin-top: 8px; font-size: 12px; color: #999;';
+    time.textContent = new Date().toLocaleTimeString('he-IL');
+
+    content.append(title, body, time);
+
+    const close = document.createElement('button');
+    close.style.cssText = 'background: none; border: none; font-size: 20px;'
+        + ' color: #999; cursor: pointer; padding: 0; margin: 0;';
+    close.textContent = '×';
+    close.setAttribute('aria-label', 'סגור');
+    close.addEventListener('click', () => banner.remove());
+
+    row.append(icon, content, close);
+    banner.appendChild(row);
+
     document.body.appendChild(banner);
     
     // הסר אוטומטית אחרי 10 שניות

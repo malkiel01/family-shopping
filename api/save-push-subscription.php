@@ -1,9 +1,18 @@
 <?php
 // api/save-push-subscription.php - שמירת מנוי Push Notifications
-session_start();
 require_once '../config.php';
+require_once '../includes/session.php';
+
+bootstrapSession();
 
 header('Content-Type: application/json');
+
+// רישום מנוי הוא פעולה שמשנה מצב, ולכן דורש טוקן
+if (!verifyCsrfToken()) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'message' => 'Invalid CSRF token']);
+    exit;
+}
 
 // בדוק שהמשתמש מחובר
 if (!isset($_SESSION['user_id'])) {

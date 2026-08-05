@@ -13,10 +13,46 @@
  */
 function bootstrapSession() {
     if (session_status() === PHP_SESSION_NONE) {
+        // מאפייני העוגייה חייבים להיקבע לפני session_start.
+        // path ו-domain נשארים כברירת המחדל בכוונה, כדי שסשנים
+        // קיימים לא יינתקו בעקבות השינוי.
+        session_set_cookie_params([
+            'httponly' => true,             // העוגייה לא נגישה ל-JavaScript
+            'secure'   => isHttpsRequest(), // נשלחת רק על גבי HTTPS
+            'samesite' => 'Lax',            // לא נשלחת בבקשות POST מאתר זר
+        ]);
         session_start();
     }
 
     if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+}
+
+/**
+ * האם הבקשה הנוכחית הגיעה ב-HTTPS.
+ */
+function isHttpsRequest() {
+    if (!empty($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS']) !== 'off') {
+        return true;
+    }
+
+    // מאחורי proxy או load balancer
+    $forwarded = $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '';
+
+    return strtolower($forwarded) === 'https';
+}
+
+/**
+ * מחליף את מזהה ה-session אחרי התחברות מוצלחת.
+ *
+ * בלי זה, מזהה שהיה ידוע לתוקף לפני ההתחברות ממשיך להיות תקף
+ * אחריה - וזו התקפת session fixation. הטוקן של CSRF מוחלף גם הוא,
+ * כדי שלא יישאר טוקן שנוצר לפני שידענו מי המשתמש.
+ */
+function regenerateSessionAfterLogin() {
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_regenerate_id(true);
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
     }
 }

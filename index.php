@@ -4,7 +4,12 @@
  * index.php
  */
 
-session_start();
+require_once 'config.php';
+require_once 'includes/session.php';
+
+// דרך bootstrapSession, כדי שהעוגייה תקבל את אותן הגדרות אבטחה
+// כמו בשאר הדפים
+bootstrapSession();
 
 // אם המשתמש מחובר - הפנה לדשבורד
 if (isset($_SESSION['user_id'])) {

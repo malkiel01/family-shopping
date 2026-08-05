@@ -1,6 +1,7 @@
 <?php
 require_once '../config.php';
 require_once '../includes/session.php';
+require_once '../includes/rate_limit.php';
 
 /**
  * מסיים התחברות: מפנה ליעד שנשמר לפני ההתחברות
@@ -29,15 +30,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
         $error = 'יש למלא את כל השדות';
     } else {
         $pdo = getDBConnection();
-        $stmt = $pdo->prepare("SELECT * FROM users WHERE (username = ? OR email = ?) AND is_active = 1");
-        $stmt->execute([$username, $username]);
-        $user = $stmt->fetch(PDO::FETCH_ASSOC);
-        
+
+        // חסימת ניחוש סיסמאות לפני שבכלל ניגשים לבדיקה
+        $blockedFor = loginBlockedFor($pdo, $username);
+
+        if ($blockedFor > 0) {
+            $error = loginBlockedMessage($blockedFor);
+            $user  = false;
+        } else {
+            $stmt = $pdo->prepare("SELECT * FROM users WHERE (username = ? OR email = ?) AND is_active = 1");
+            $stmt->execute([$username, $username]);
+            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        }
+
         if ($user && password_verify($password, $user['password'])) {
+            recordLoginAttempt($pdo, $username, true);
+
+            // מזהה session חדש, כדי שמזהה שהיה ידוע לפני ההתחברות
+            // לא יישאר תקף אחריה
+            regenerateSessionAfterLogin();
+
             // עדכון זמן התחברות אחרון
             $updateStmt = $pdo->prepare("UPDATE users SET last_login = NOW() WHERE id = ?");
             $updateStmt->execute([$user['id']]);
-            
+
             // שמירת פרטי המשתמש בסשן
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['username'] = $user['username'];
@@ -46,7 +62,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
             $_SESSION['profile_picture'] = $user['profile_picture'];
 
             finishLogin();
-        } else {
+        } elseif ($blockedFor === 0) {
+            recordLoginAttempt($pdo, $username, false);
             $error = 'שם משתמש או סיסמה שגויים';
         }
     }

@@ -109,7 +109,9 @@ async function checkServerNotifications() {
     if (typeof showNotificationUniversal !== 'function') return;
 
     try {
-        const response = await fetch(CONFIG.basePath + '/api/simple-notifications.php?action=get-pending');
+        const response = await fetch(CONFIG.basePath + '/api/simple-notifications.php?action=get-pending', {
+            headers: { 'X-CSRF-Token': CONFIG.csrfToken }
+        });
         const data = await response.json();
 
         if (!data.success || !Array.isArray(data.notifications)) return;

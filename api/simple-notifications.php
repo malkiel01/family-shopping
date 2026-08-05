@@ -1,10 +1,20 @@
 <?php
 // api/simple-notifications.php - מערכת התראות פשוטה
-session_start();
 require_once '../config.php';
+require_once '../includes/session.php';
+
+bootstrapSession();
 
 header('Content-Type: application/json');
 header('Cache-Control: no-cache, must-revalidate');
+
+// הנקודה הזו מסמנת התראות כנקראו, כלומר משנה מצב. בלי טוקן, אתר
+// זר היה יכול לגרום לדפדפן של המשתמש לבלוע את ההתראות שלו.
+if (!verifyCsrfToken()) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'message' => 'Invalid CSRF token']);
+    exit;
+}
 
 // בדיקה אם המשתמש מחובר
 $isLoggedIn = isset($_SESSION['user_id']);
