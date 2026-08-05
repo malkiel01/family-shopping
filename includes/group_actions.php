@@ -224,26 +224,63 @@ function invitationLink($token) {
     return $scheme . '://' . $host . $base . '/join.php?token=' . urlencode($token);
 }
 
-function queueInvitationNotification(GroupContext $context, $invitationId, $invitedUserId) {
+/**
+ * מכניס התראה לתור עבור משתמש אחד.
+ *
+ * שתי נקודות שחייבות להישמר כאן, כי בלעדיהן ההתראה נכנסת לתור
+ * ולא מוצגת לעולם:
+ *   1. user_id נשמר בעמודה עצמה ולא רק בתוך ה-JSON. הצרכן שולף
+ *      לפי העמודה, ולכן התראה בלי העמודה הזו פשוט לא נמצאת.
+ *   2. title ו-body נשמרים בתוך data. הצרכן קורא אותם משם, ובלעדיהם
+ *      מוצגת התראה ריקה עם הכותרת הגנרית "התראה".
+ *
+ * @param array $extra שדות נוספים שנשמרים ב-data לשימוש הלקוח
+ */
+function queueNotification(PDO $pdo, $userId, $type, $title, $body, array $extra = []) {
     try {
-        $stmt = $context->pdo->prepare("SELECT name FROM purchase_groups WHERE id = ?");
-        $stmt->execute([$context->groupId]);
-        $groupName = $stmt->fetchColumn() ?: 'קבוצה';
-
-        $stmt = $context->pdo->prepare("
-            INSERT INTO notification_queue (type, data, status, created_at)
-            VALUES ('invitation', ?, 'pending', NOW())
+        $stmt = $pdo->prepare("
+            INSERT INTO notification_queue (user_id, type, data, status, created_at)
+            VALUES (?, ?, ?, 'pending', NOW())
         ");
-        $stmt->execute([json_encode([
+        $stmt->execute([
+            (int)$userId,
+            $type,
+            json_encode(array_merge([
+                'type'  => $type,
+                'title' => $title,
+                'body'  => $body,
+            ], $extra), JSON_UNESCAPED_UNICODE),
+        ]);
+
+        return (int)$pdo->lastInsertId();
+    } catch (Exception $e) {
+        // התראה שנכשלה לא אמורה להפיל את הפעולה עצמה
+        error_log("Failed to queue $type notification: " . $e->getMessage());
+
+        return 0;
+    }
+}
+
+function queueInvitationNotification(GroupContext $context, $invitationId, $invitedUserId) {
+    $stmt = $context->pdo->prepare("SELECT name FROM purchase_groups WHERE id = ?");
+    $stmt->execute([$context->groupId]);
+    $groupName = $stmt->fetchColumn() ?: 'קבוצה';
+
+    $inviter = $_SESSION['name'] ?? 'מנהל האירוע';
+
+    queueNotification(
+        $context->pdo,
+        $invitedUserId,
+        'invitation',
+        'הזמנה לאירוע משפחתי',
+        sprintf('%s הזמין אותך להצטרף ל"%s"', $inviter, $groupName),
+        [
             'invitation_id' => (int)$invitationId,
-            'user_id'       => (int)$invitedUserId,
             'group_id'      => $context->groupId,
             'group_name'    => $groupName,
-        ], JSON_UNESCAPED_UNICODE)]);
-    } catch (Exception $e) {
-        // התראה שנכשלה לא אמורה להפיל את ההזמנה עצמה
-        error_log("Failed to queue invitation notification: " . $e->getMessage());
-    }
+            'url'           => (defined('APP_BASE_PATH') ? APP_BASE_PATH : '') . '/dashboard.php',
+        ]
+    );
 }
 
 function availablePercentage($pdo, $groupId, $excludeMemberId = null) {
@@ -528,7 +565,7 @@ function actionAddPurchase(GroupContext $context) {
         throw $e;
     }
 
-    notifyNewPurchaseSafely($purchaseId);
+    notifyNewPurchaseSafely($context, $purchaseId, $amount, $description);
 
     jsonOk(['purchase_id' => $purchaseId]);
 }
@@ -629,22 +666,57 @@ function actionDeletePurchase(GroupContext $context) {
     jsonOk();
 }
 
-function notifyNewPurchaseSafely($purchaseId) {
+/**
+ * מודיע לשאר המשתתפים באירוע שנוספה קנייה.
+ *
+ * הגרסה הקודמת קראה ל-notifyNewPurchase() מתוך
+ * api/send-push-notification.php - פונקציה שאינה מוגדרת שם כלל.
+ * הקריאה הייתה עטופה ב-function_exists, ולכן לא קרסה, אבל גם
+ * מעולם לא שלחה דבר.
+ */
+function notifyNewPurchaseSafely(GroupContext $context, $purchaseId, $amount, $description) {
     try {
-        // טוענים את קובץ ההתראות רק אם הפונקציה עוד לא מוגדרת
-        if (!function_exists('notifyNewPurchase')) {
-            $notificationFile = dirname(__DIR__) . '/api/send-push-notification.php';
-            if (!file_exists($notificationFile)) {
-                return;
-            }
-            require_once $notificationFile;
+        $stmt = $context->pdo->prepare("SELECT name FROM purchase_groups WHERE id = ?");
+        $stmt->execute([$context->groupId]);
+        $groupName = $stmt->fetchColumn() ?: 'האירוע';
+
+        // כל המשתתפים הפעילים שיש להם חשבון, חוץ ממי שרשם את הקנייה
+        $stmt = $context->pdo->prepare("
+            SELECT DISTINCT user_id
+            FROM group_members
+            WHERE group_id = ? AND is_active = 1
+              AND user_id IS NOT NULL AND user_id != ?
+        ");
+        $stmt->execute([$context->groupId, $context->userId]);
+        $recipients = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+        if (!$recipients) {
+            return;
         }
 
-        if (function_exists('notifyNewPurchase')) {
-            notifyNewPurchase($purchaseId);
+        $buyer  = $_SESSION['name'] ?? 'משתתף';
+        $symbol = defined('CURRENCY_SYMBOL') ? CURRENCY_SYMBOL : '₪';
+        $body   = $description !== ''
+            ? sprintf('%s רשם קנייה: %s, %s%s', $buyer, $description, $symbol, number_format((float)$amount, 2))
+            : sprintf('%s רשם קנייה על %s%s', $buyer, $symbol, number_format((float)$amount, 2));
+
+        foreach ($recipients as $userId) {
+            queueNotification(
+                $context->pdo,
+                $userId,
+                'purchase',
+                'קנייה חדשה ב"' . $groupName . '"',
+                $body,
+                [
+                    'purchase_id' => (int)$purchaseId,
+                    'group_id'    => $context->groupId,
+                    'url'         => (defined('APP_BASE_PATH') ? APP_BASE_PATH : '')
+                        . '/group.php?id=' . $context->groupId,
+                ]
+            );
         }
     } catch (Exception $e) {
-        error_log("Error sending purchase notifications: " . $e->getMessage());
+        error_log('Error queueing purchase notifications: ' . $e->getMessage());
     }
 }
 

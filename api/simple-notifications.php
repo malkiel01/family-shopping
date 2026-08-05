@@ -91,10 +91,10 @@ switch ($action) {
             if ($stmt->fetchColumn() > 0) {
                 // אם הטבלה קיימת, משוך התראות
                 $stmt = $pdo->prepare("
-                    SELECT * FROM notification_queue 
-                    WHERE user_id = ? 
+                    SELECT * FROM notification_queue
+                    WHERE user_id = ?
                     AND status = 'pending'
-                    AND created_at > DATE_SUB(NOW(), INTERVAL 24 HOUR)
+                    AND created_at > DATE_SUB(NOW(), INTERVAL 7 DAY)
                     ORDER BY created_at DESC
                     LIMIT 10
                 ");
@@ -120,9 +120,12 @@ switch ($action) {
                 if (!empty($processed)) {
                     $ids = array_column($notifications, 'id');
                     $placeholders = str_repeat('?,', count($ids) - 1) . '?';
+                    // 'read' אינו ערך חוקי ב-enum של העמודה. MySQL
+                    // כתב במקומו מחרוזת ריקה, וכך נוצרו שורות עם
+                    // status ריק שאף אחד לא מוצא יותר.
                     $stmt = $pdo->prepare("
-                        UPDATE notification_queue 
-                        SET status = 'read' 
+                        UPDATE notification_queue
+                        SET status = 'completed', processed_at = NOW()
                         WHERE id IN ($placeholders)
                     ");
                     $stmt->execute($ids);

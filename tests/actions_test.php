@@ -120,7 +120,8 @@ function makeDb() {
         status TEXT DEFAULT 'pending', created_at TEXT DEFAULT '2026-01-01', responded_at TEXT)");
 
     $pdo->exec("CREATE TABLE notification_queue (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT, data TEXT, status TEXT, created_at TEXT)");
+        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, type TEXT, data TEXT,
+        status TEXT, created_at TEXT, processed_at TEXT)");
 
     // משתמשים: 1 = מנהל, 2 = חבר, 3 = חבר
     $pdo->exec("INSERT INTO users (id, name, email) VALUES
@@ -353,6 +354,27 @@ $r = run($pdo, 'addMember', [
 check('הזמנה למשתמש רשום מסומנת ככזו', $r['is_registered'] === true);
 $queued = $pdo->query("SELECT COUNT(*) FROM notification_queue WHERE type = 'invitation'")->fetchColumn();
 check('התראה נכנסה לתור', (int)$queued === 1, "בתור: $queued");
+
+// הצרכן שולף לפי העמודה user_id ומציג את title ו-body מתוך data.
+// בלי שלושת אלה ההתראה יושבת בתור ולא מוצגת לעולם.
+$row  = $pdo->query("SELECT * FROM notification_queue WHERE type = 'invitation'")->fetch(PDO::FETCH_ASSOC);
+$data = json_decode($row['data'], true);
+check('ההתראה משויכת לנמען בעמודה user_id', (int)$row['user_id'] === 9, "user_id: {$row['user_id']}");
+check('להתראה יש כותרת', !empty($data['title']));
+check('להתראה יש גוף שמזכיר את שם הקבוצה', !empty($data['body']) && mb_strpos($data['body'], 'פסח') !== false);
+
+// ------------------------------------------------------------
+echo "\n8ב. התראה על קנייה חדשה\n";
+// ------------------------------------------------------------
+$pdoP = makeDb();
+$pdoP->exec("DELETE FROM notification_queue");
+run($pdoP, 'addPurchase', ['member_id' => 1, 'amount' => 90, 'description' => 'ירקות'], 1, true, 1);
+$rows = $pdoP->query("SELECT * FROM notification_queue WHERE type = 'purchase'")->fetchAll(PDO::FETCH_ASSOC);
+// המשתתפים הם 1, 2 ו-3, והרוכש עצמו לא מקבל התראה
+check('נשלחה התראה לכל שאר המשתתפים', count($rows) === 2, 'נשלחו: ' . count($rows));
+check('הרוכש עצמו לא קיבל התראה', !in_array('1', array_column($rows, 'user_id'), false));
+$pdata = json_decode($rows[0]['data'] ?? '{}', true);
+check('גוף ההתראה כולל את הסכום', !empty($pdata['body']) && mb_strpos($pdata['body'], '90') !== false);
 
 // ------------------------------------------------------------
 echo "\n9. הסרת משתתף\n";
