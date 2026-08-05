@@ -9,6 +9,7 @@
 
 require_once 'config.php';
 require_once 'includes/session.php';
+require_once 'includes/notifications.php';
 
 $pdo   = getDBConnection();
 $token = trim($_GET['token'] ?? '');
@@ -109,6 +110,16 @@ if (!$error && !$emailMismatch && $_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if (!$error) {
+            notifyGroupOwner(
+                $pdo, $invitation['group_id'], $userId, 'invitation_accepted',
+                'הצטרפות לאירוע אושרה',
+                sprintf(
+                    '%s הצטרף ל"%s"',
+                    $_SESSION['name'] ?? $invitation['nickname'],
+                    groupNameById($pdo, $invitation['group_id'])
+                )
+            );
+
             header('Location: ' . APP_BASE_PATH . '/group.php?id=' . (int)$invitation['group_id']);
             exit;
         }
@@ -117,6 +128,17 @@ if (!$error && !$emailMismatch && $_SERVER['REQUEST_METHOD'] === 'POST') {
             UPDATE group_invitations SET status = 'rejected', responded_at = NOW() WHERE id = ?
         ");
         $stmt->execute([$invitation['id']]);
+
+        notifyGroupOwner(
+            $pdo, $invitation['group_id'], $userId, 'invitation_rejected',
+            'הזמנה נדחתה',
+            sprintf(
+                '%s דחה את ההזמנה ל"%s"',
+                $_SESSION['name'] ?? $invitation['nickname'],
+                groupNameById($pdo, $invitation['group_id'])
+            )
+        );
+
         $done = 'ההזמנה נדחתה';
     }
 }

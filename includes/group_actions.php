@@ -3,6 +3,7 @@
 // טיפול בכל פעולות ה-AJAX של הקבוצה
 
 require_once __DIR__ . '/upload.php';
+require_once __DIR__ . '/notifications.php';
 
 /**
  * הקשר הבקשה - נשמר פעם אחת כדי שכל פונקציה תדע
@@ -236,28 +237,61 @@ function invitationLink($token) {
  *
  * @param array $extra שדות נוספים שנשמרים ב-data לשימוש הלקוח
  */
-function queueNotification(PDO $pdo, $userId, $type, $title, $body, array $extra = []) {
+/** שם האירוע, נשלף פעם אחת לכל בקשה */
+function groupDisplayName(GroupContext $context) {
+    static $names = [];
+
+    if (!isset($names[$context->groupId])) {
+        $stmt = $context->pdo->prepare("SELECT name FROM purchase_groups WHERE id = ?");
+        $stmt->execute([$context->groupId]);
+        $names[$context->groupId] = $stmt->fetchColumn() ?: 'האירוע';
+    }
+
+    return $names[$context->groupId];
+}
+
+/**
+ * מודיע לכל המשתתפים הפעילים באירוע, חוץ ממי שביצע את הפעולה.
+ * מי שעדיין לא נרשם למערכת (אין לו user_id) פשוט מדולג.
+ */
+function notifyGroupMembers(GroupContext $context, $type, $title, $body, array $extra = []) {
     try {
-        $stmt = $pdo->prepare("
-            INSERT INTO notification_queue (user_id, type, data, status, created_at)
-            VALUES (?, ?, ?, 'pending', NOW())
+        $stmt = $context->pdo->prepare("
+            SELECT DISTINCT user_id
+            FROM group_members
+            WHERE group_id = ? AND is_active = 1
+              AND user_id IS NOT NULL AND user_id != ?
         ");
-        $stmt->execute([
-            (int)$userId,
-            $type,
-            json_encode(array_merge([
-                'type'  => $type,
-                'title' => $title,
-                'body'  => $body,
-            ], $extra), JSON_UNESCAPED_UNICODE),
-        ]);
+        $stmt->execute([$context->groupId, $context->userId]);
 
-        return (int)$pdo->lastInsertId();
+        foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $userId) {
+            queueNotification($context->pdo, $userId, $type, $title, $body, array_merge([
+                'group_id' => $context->groupId,
+                'url'      => groupUrl($context->groupId),
+            ], $extra));
+        }
     } catch (Exception $e) {
-        // התראה שנכשלה לא אמורה להפיל את הפעולה עצמה
-        error_log("Failed to queue $type notification: " . $e->getMessage());
+        error_log("Failed to notify group members: " . $e->getMessage());
+    }
+}
 
-        return 0;
+/** מודיע למשתתף יחיד לפי מזהה השורה בטבלת המשתתפים */
+function notifyMember(GroupContext $context, $memberId, $type, $title, $body, array $extra = []) {
+    try {
+        $stmt = $context->pdo->prepare("SELECT user_id FROM group_members WHERE id = ? AND group_id = ?");
+        $stmt->execute([$memberId, $context->groupId]);
+        $userId = $stmt->fetchColumn();
+
+        if (!$userId || (int)$userId === (int)$context->userId) {
+            return;
+        }
+
+        queueNotification($context->pdo, $userId, $type, $title, $body, array_merge([
+            'group_id' => $context->groupId,
+            'url'      => groupUrl($context->groupId),
+        ], $extra));
+    } catch (Exception $e) {
+        error_log("Failed to notify member: " . $e->getMessage());
     }
 }
 
@@ -346,6 +380,13 @@ function actionRemoveMember(GroupContext $context) {
         $stmt->execute([$memberId]);
     }
 
+    notifyMember(
+        $context, $memberId, 'member_removed',
+        'הוסרת מ"' . groupDisplayName($context) . '"',
+        actorName() . ' הסיר אותך מהאירוע',
+        ['url' => (defined('APP_BASE_PATH') ? APP_BASE_PATH : '') . '/dashboard.php']
+    );
+
     jsonOk();
 }
 
@@ -373,6 +414,17 @@ function actionEditMember(GroupContext $context) {
         WHERE id = ? AND group_id = ?
     ");
     $stmt->execute([$participationType, $participationValue, $memberId, $context->groupId]);
+
+    $symbol = defined('CURRENCY_SYMBOL') ? CURRENCY_SYMBOL : '₪';
+    $share  = $participationType === 'percentage'
+        ? $participationValue . '%'
+        : $symbol . number_format($participationValue, 2);
+
+    notifyMember(
+        $context, $memberId, 'share_changed',
+        'חלקך ב"' . groupDisplayName($context) . '" עודכן',
+        actorName() . ' עדכן את חלקך ל-' . $share
+    );
 
     jsonOk();
 }
@@ -417,6 +469,12 @@ function actionSplitEqually(GroupContext $context) {
         $context->pdo->rollBack();
         throw $e;
     }
+
+    notifyGroupMembers(
+        $context, 'share_changed',
+        'החלוקה ב"' . groupDisplayName($context) . '" עודכנה',
+        actorName() . " חילק את ההוצאות שווה בשווה - {$share}% לכל משתתף"
+    );
 
     jsonOk(['message' => "החלוקה עודכנה - {$share}% לכל משתתף"]);
 }
@@ -612,6 +670,15 @@ function actionUpdatePurchase(GroupContext $context) {
         saveExclusions($context, $purchaseId, $exclusions['ids']);
 
         $context->pdo->commit();
+
+        $symbol = defined('CURRENCY_SYMBOL') ? CURRENCY_SYMBOL : '₪';
+        notifyGroupMembers(
+            $context, 'purchase_updated',
+            'קנייה עודכנה ב"' . groupDisplayName($context) . '"',
+            actorName() . ' עדכן קנייה ל-' . $symbol . number_format((float)$amount, 2)
+                . ($description !== '' ? ' (' . $description . ')' : ''),
+            ['purchase_id' => (int)$purchaseId]
+        );
     } catch (Exception $e) {
         $context->pdo->rollBack();
         throw $e;
@@ -662,6 +729,12 @@ function actionDeletePurchase(GroupContext $context) {
     }
 
     deleteReceiptImage($purchase['image_path']);
+
+    notifyGroupMembers(
+        $context, 'purchase_deleted',
+        'קנייה נמחקה מ"' . groupDisplayName($context) . '"',
+        actorName() . ' מחק קנייה מהאירוע'
+    );
 
     jsonOk();
 }
@@ -751,7 +824,17 @@ function actionAddItem(GroupContext $context) {
         $context->userId, $sortOrder,
     ]);
 
-    jsonOk(['item_id' => (int)$context->pdo->lastInsertId()]);
+    // חייב להילקח לפני ההתראה: היא מבצעת INSERT משלה,
+    // ואחריה lastInsertId כבר מצביע על שורת ההתראה
+    $itemId = (int)$context->pdo->lastInsertId();
+
+    notifyGroupMembers(
+        $context, 'item_added',
+        'פריט חדש ברשימה של "' . groupDisplayName($context) . '"',
+        actorName() . ' הוסיף לרשימה: ' . $title . ($quantity !== '' ? ' (' . $quantity . ')' : '')
+    );
+
+    jsonOk(['item_id' => $itemId]);
 }
 
 function actionUpdateItem(GroupContext $context) {
@@ -816,6 +899,22 @@ function actionSetItemStatus(GroupContext $context) {
     ");
     $stmt->execute([$status, $assignedMemberId, $itemId, $context->groupId]);
 
+    $titleStmt = $context->pdo->prepare("SELECT title FROM shopping_items WHERE id = ?");
+    $titleStmt->execute([$itemId]);
+    $itemTitle = $titleStmt->fetchColumn() ?: 'פריט';
+
+    $wording = [
+        'claimed' => ' לקח על עצמו להביא: ',
+        'bought'  => ' קנה: ',
+        'needed'  => ' החזיר לרשימה: ',
+    ];
+
+    notifyGroupMembers(
+        $context, 'item_status',
+        'עדכון ברשימה של "' . groupDisplayName($context) . '"',
+        actorName() . $wording[$status] . $itemTitle
+    );
+
     jsonOk();
 }
 
@@ -823,7 +922,7 @@ function actionDeleteItem(GroupContext $context) {
     $itemId = intval($_POST['item_id'] ?? 0);
 
     $stmt = $context->pdo->prepare("
-        SELECT created_by FROM shopping_items WHERE id = ? AND group_id = ?
+        SELECT created_by, title FROM shopping_items WHERE id = ? AND group_id = ?
     ");
     $stmt->execute([$itemId, $context->groupId]);
     $item = $stmt->fetch();
@@ -840,6 +939,12 @@ function actionDeleteItem(GroupContext $context) {
 
     $stmt = $context->pdo->prepare("DELETE FROM shopping_items WHERE id = ? AND group_id = ?");
     $stmt->execute([$itemId, $context->groupId]);
+
+    notifyGroupMembers(
+        $context, 'item_deleted',
+        'פריט הוסר מהרשימה של "' . groupDisplayName($context) . '"',
+        actorName() . ' הסיר מהרשימה: ' . $item['title']
+    );
 
     jsonOk();
 }
@@ -889,7 +994,19 @@ function actionAddSettlement(GroupContext $context) {
         $amount, $note !== '' ? $note : null, $context->userId,
     ]);
 
-    jsonOk(['settlement_id' => (int)$context->pdo->lastInsertId()]);
+    // חייב להילקח לפני ההתראה, שמבצעת INSERT משלה
+    $settlementId = (int)$context->pdo->lastInsertId();
+
+    // שני הצדדים להעברה מקבלים הודעה, גם אם מישהו אחר רשם אותה
+    $symbol = defined('CURRENCY_SYMBOL') ? CURRENCY_SYMBOL : '₪';
+    $body   = actorName() . ' רשם העברה של ' . $symbol . number_format($amount, 2)
+        . ' ב"' . groupDisplayName($context) . '"';
+
+    foreach ([$fromMemberId, $toMemberId] as $party) {
+        notifyMember($context, $party, 'settlement', 'התחשבנות נרשמה', $body);
+    }
+
+    jsonOk(['settlement_id' => $settlementId]);
 }
 
 function actionDeleteSettlement(GroupContext $context) {
@@ -919,6 +1036,11 @@ function actionDeleteSettlement(GroupContext $context) {
 
     $stmt = $context->pdo->prepare("DELETE FROM settlements WHERE id = ? AND group_id = ?");
     $stmt->execute([$settlementId, $context->groupId]);
+
+    $body = actorName() . ' ביטל התחשבנות ב"' . groupDisplayName($context) . '"';
+    foreach ([(int)$settlement['from_member_id'], (int)$settlement['to_member_id']] as $party) {
+        notifyMember($context, $party, 'settlement_deleted', 'התחשבנות בוטלה', $body);
+    }
 
     jsonOk();
 }
@@ -956,6 +1078,20 @@ function actionUpdateEvent(GroupContext $context) {
         $context->groupId,
     ]);
 
+    $details = [];
+    if ($eventDate !== '') {
+        $details[] = 'תאריך: ' . $eventDate;
+    }
+    if ($location !== '') {
+        $details[] = 'מיקום: ' . $location;
+    }
+
+    notifyGroupMembers(
+        $context, 'event_updated',
+        'פרטי "' . $name . '" עודכנו',
+        actorName() . ' עדכן את פרטי האירוע' . ($details ? ' — ' . implode(', ', $details) : '')
+    );
+
     jsonOk();
 }
 
@@ -965,6 +1101,12 @@ function actionCloseEvent(GroupContext $context) {
     ");
     $stmt->execute([$context->groupId]);
 
+    notifyGroupMembers(
+        $context, 'event_closed',
+        '"' . groupDisplayName($context) . '" נסגר',
+        actorName() . ' סגר את האירוע. אפשר עדיין לרשום התחשבנויות'
+    );
+
     jsonOk(['message' => 'האירוע נסגר']);
 }
 
@@ -973,6 +1115,12 @@ function actionReopenEvent(GroupContext $context) {
         UPDATE purchase_groups SET status = 'active', closed_at = NULL WHERE id = ?
     ");
     $stmt->execute([$context->groupId]);
+
+    notifyGroupMembers(
+        $context, 'event_reopened',
+        '"' . groupDisplayName($context) . '" נפתח מחדש',
+        actorName() . ' פתח מחדש את האירוע'
+    );
 
     jsonOk(['message' => 'האירוע נפתח מחדש']);
 }

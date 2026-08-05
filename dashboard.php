@@ -7,6 +7,7 @@
 require_once 'config.php';
 require_once 'includes/auth_check.php';
 require_once 'includes/schema.php';
+require_once 'includes/notifications.php';
 
 $pdo     = getDBConnection();
 $user_id = $_SESSION['user_id'];
@@ -117,7 +118,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $stmt = $pdo->prepare("
                     UPDATE group_members SET is_active = 0 WHERE group_id = ? AND user_id = ?
                 ");
-                echo json_encode(['success' => $stmt->execute([$group_id, $user_id])]);
+                $left = $stmt->execute([$group_id, $user_id]);
+
+                if ($left) {
+                    notifyGroupOwner(
+                        $pdo, $group_id, $user_id, 'member_left',
+                        'משתתף עזב את האירוע',
+                        sprintf(
+                            '%s עזב את "%s"',
+                            $_SESSION['name'] ?? 'משתתף',
+                            groupNameById($pdo, $group_id)
+                        )
+                    );
+                }
+
+                echo json_encode(['success' => $left]);
             }
             exit;
 
@@ -186,6 +201,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 ]);
 
                 $pdo->commit();
+
+                // מנהל האירוע צריך לדעת מי אישר ומי דחה
+                $accepted = ($response === 'accept');
+                notifyGroupOwner(
+                    $pdo, $invitation['group_id'], $user_id,
+                    $accepted ? 'invitation_accepted' : 'invitation_rejected',
+                    $accepted ? 'הצטרפות לאירוע אושרה' : 'הזמנה נדחתה',
+                    sprintf(
+                        '%s %s את ההזמנה ל"%s"',
+                        $_SESSION['name'] ?? $invitation['nickname'],
+                        $accepted ? 'אישר' : 'דחה',
+                        groupNameById($pdo, $invitation['group_id'])
+                    )
+                );
+
                 echo json_encode([
                     'success'  => true,
                     'group_id' => $response === 'accept' ? (int)$invitation['group_id'] : null,
