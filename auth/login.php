@@ -98,7 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['register'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>התחברות - <?php echo SITE_NAME; ?></title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="../css/styles.css" rel="stylesheet">
+    <link href="<?php echo asset('/css/styles.css'); ?>" rel="stylesheet">
     
     <!-- Google Sign-In API -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -370,7 +370,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['register'])) {
     </script>
     <!-- הוסף לפני סוף ה-body -->
     <!-- PWA Notifications Manager - גרסה קומפקטית -->
-    <script src="../js/pwa-notifications-compact.js"></script>
+    <script src="<?php echo asset('/js/pwa-notifications-compact.js'); ?>"></script>
     <script>
         // הפעל בדיקת התראות אחרי טעינת הדף
         window.addEventListener('load', () => {

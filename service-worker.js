@@ -1,14 +1,15 @@
 // service-worker.js - גרסה משולבת שעובדת!
-const CACHE_NAME = 'panan-bakan-v1.1.0';
+const CACHE_NAME = 'panan-bakan-v1.2.0';
+
+// רק קבצים סטטיים שמוחזרים ישירות עם 200.
+//
+// חשוב: אסור לרשום כאן דפי PHP. הם מחזירים 302 למי שלא מחובר,
+// ו-cache.addAll נכשל על תגובת הפניה - מה שמפיל את כל ההתקנה
+// ומשאיר את הגרסה הקודמת של ה-Service Worker בשליטה לנצח.
+//
+// CSS ו-JS גם הם לא כאן: הם נטענים עם חותמת גרסה (?v=...), ולכן
+// נשמרים ב-cache בפעם הראשונה שמבקשים אותם ומתחלפים מאליהם.
 const urlsToCache = [
-  '/family/',
-  '/family/dashboard.php',
-  '/family/auth/login.php',
-  '/family/css/dashboard.css',
-  '/family/css/group.css',
-  '/family/css/styles.css',
-  '/family/js/group.js',
-  '/family/js/dashboard.js',
   '/family/offline.html',
   '/family/images/icons/android/android-launchericon-192-192.png',
   '/family/images/icons/android/android-launchericon-512-512.png'
@@ -26,7 +27,12 @@ self.addEventListener('install', event => {
     caches.open(CACHE_NAME)
       .then(cache => {
         console.log('Service Worker: Caching files');
-        return cache.addAll(urlsToCache);
+        // כל קובץ בנפרד: קובץ אחד שנכשל לא מפיל את ההתקנה כולה
+        return Promise.allSettled(
+          urlsToCache.map(url => cache.add(url).catch(err => {
+            console.warn('Service Worker: skipping', url, err);
+          }))
+        );
       })
       .then(() => self.skipWaiting())
   );
@@ -269,32 +275,36 @@ self.addEventListener('fetch', event => {
     return; // תן לבקשה לעבור ישירות
   }
   
-  // Cache רק לקבצים סטטיים
+  // Cache רק לקבצים סטטיים.
+  //
+  // האסטרטגיה היא stale-while-revalidate: מגישים מיד מה-cache כדי
+  // שהאתר יעלה מהר, ובמקביל מרעננים מהרשת לפעם הבאה. cache-first
+  // בלי רענון היה מקפיא קבצים ישנים אצל המשתמש גם אחרי עדכון בשרת.
   if (event.request.method === 'GET') {
     event.respondWith(
-      caches.match(event.request)
-        .then(response => {
-          if (response) {
-            return response; // החזר מה-cache
+      caches.match(event.request).then(cached => {
+        const network = fetch(event.request).then(response => {
+          // אין טעם לשמור תשובות חלקיות, הפניות או תשובות אטומות
+          if (response && response.status === 200 && response.type === 'basic' && !response.redirected) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
           }
-          return fetch(event.request).then(response => {
-            // שמור ב-cache רק אם הצליח
-            if (!response || response.status !== 200 || response.type !== 'basic') {
-              return response;
-            }
-            const responseToCache = response.clone();
-            caches.open(CACHE_NAME).then(cache => {
-              cache.put(event.request, responseToCache);
-            });
-            return response;
-          });
-        })
-        .catch(() => {
-          // אם נכשל והקובץ הוא HTML, החזר offline page
-          if (event.request.headers.get('accept').includes('text/html')) {
+          return response;
+        });
+
+        // יש עותק שמור - מחזירים אותו מיד, והרענון ממשיך ברקע
+        if (cached) {
+          network.catch(() => {});
+          return cached;
+        }
+
+        return network.catch(() => {
+          if ((event.request.headers.get('accept') || '').includes('text/html')) {
             return caches.match('/family/offline.html');
           }
-        })
+          return Response.error();
+        });
+      })
     );
   }
 });

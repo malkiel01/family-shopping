@@ -183,7 +183,7 @@ $canEdit = !$is_closed;
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo htmlspecialchars($group['name']); ?> - <?php echo SITE_NAME; ?></title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="<?php echo APP_BASE_PATH; ?>/css/group.css">
+    <link rel="stylesheet" href="<?php echo asset('/css/group.css'); ?>">
     <link rel="manifest" href="<?php echo APP_BASE_PATH; ?>/manifest.json">
     <meta name="theme-color" content="#667eea">
 </head>
@@ -629,6 +629,6 @@ $canEdit = !$is_closed;
             summaryText:         <?php echo json_encode($summaryText, JSON_UNESCAPED_UNICODE); ?>
         };
     </script>
-    <script src="<?php echo APP_BASE_PATH; ?>/js/group.js"></script>
+    <script src="<?php echo asset('/js/group.js'); ?>"></script>
 </body>
 </html>

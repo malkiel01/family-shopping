@@ -298,7 +298,7 @@ function eventDateLabel($date) {
     <title>האירועים שלי - <?php echo SITE_NAME; ?></title>
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="<?php echo APP_BASE_PATH; ?>/css/dashboard.css">
+    <link rel="stylesheet" href="<?php echo asset('/css/dashboard.css'); ?>">
 
     <link rel="manifest" href="<?php echo APP_BASE_PATH; ?>/manifest.json">
     <meta name="theme-color" content="#667eea">
@@ -479,8 +479,8 @@ function eventDateLabel($date) {
             featuresReady: <?php echo $featuresReady ? 'true' : 'false'; ?>
         };
     </script>
-    <script src="<?php echo APP_BASE_PATH; ?>/js/notification-system.js"></script>
-    <script src="<?php echo APP_BASE_PATH; ?>/js/dashboard.js"></script>
+    <script src="<?php echo asset('/js/notification-system.js'); ?>"></script>
+    <script src="<?php echo asset('/js/dashboard.js'); ?>"></script>
 
     <script>
         if ('serviceWorker' in navigator) {

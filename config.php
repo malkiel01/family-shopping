@@ -57,6 +57,24 @@ define('CURRENCY_SYMBOL', '₪');
 // נתיב הבסיס של האפליקציה באתר (בלי סלאש בסוף)
 define('APP_BASE_PATH', rtrim($_ENV['APP_BASE_PATH'] ?? '/family', '/'));
 
+/**
+ * כתובת של קובץ סטטי, עם חותמת גרסה לפי זמן השינוי של הקובץ.
+ *
+ * ה-Service Worker שומר קבצים סטטיים ב-cache לפי כתובת. בלי חותמת
+ * הגרסה, גרסה ישנה של CSS או JS ממשיכה להיות מוגשת מה-cache גם אחרי
+ * שהקובץ בשרת התעדכן. שינוי הקובץ משנה את הכתובת, ולכן הדפדפן נאלץ
+ * לגשת לרשת ולקבל את הגרסה החדשה.
+ *
+ * @param string $path נתיב יחסי לשורש האפליקציה, למשל '/css/group.css'
+ */
+function asset($path) {
+    $path = '/' . ltrim($path, '/');
+    $file = __DIR__ . $path;
+    $version = @filemtime($file) ?: 0;
+
+    return APP_BASE_PATH . $path . '?v=' . $version;
+}
+
 // הגדרות העלאת קבצים
 define('UPLOAD_DIR', 'uploads/');
 define('MAX_FILE_SIZE', 5242880);
