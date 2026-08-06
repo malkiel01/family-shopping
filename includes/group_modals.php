@@ -55,20 +55,18 @@ function renderAddMemberModal($available_percentage) {
                     <input type="text" id="memberNickname" required>
                 </div>
                 <div class="form-group">
-                    <label>סוג השתתפות:</label>
-                    <div class="radio-group">
-                        <label>
-                            <input type="radio" name="participationType" value="percentage" checked onchange="toggleParticipationType()">
-                            אחוז
-                        </label>
-                        <label>
-                            <input type="radio" name="participationType" value="fixed" onchange="toggleParticipationType()">
-                            סכום קבוע
-                        </label>
+                    <label>איך מתחלקים?</label>
+                    <div class="type-picker">
+                        <input type="radio" name="participationType" id="participationType_shares" value="shares" checked onchange="toggleParticipationType()">
+                        <label for="participationType_shares"><i class="fas fa-users"></i><span>נפשות</span></label>
+                        <input type="radio" name="participationType" id="participationType_percentage" value="percentage" onchange="toggleParticipationType()">
+                        <label for="participationType_percentage"><i class="fas fa-percentage"></i><span>אחוז</span></label>
+                        <input type="radio" name="participationType" id="participationType_fixed" value="fixed" onchange="toggleParticipationType()">
+                        <label for="participationType_fixed"><i class="fas fa-shekel-sign"></i><span>סכום קבוע</span></label>
                     </div>
                 </div>
                 <div class="form-group">
-                    <label for="memberValue">ערך השתתפות:</label>
+                    <label for="memberValue" id="memberValueLabel">ערך השתתפות:</label>
                     <div class="input-with-suffix">
                         <input type="number" id="memberValue" step="0.01" min="0.01" required>
                         <span id="valueSuffix">%</span>
@@ -128,20 +126,18 @@ function renderEditMemberModal() {
             <form id="editMemberForm">
                 <input type="hidden" id="editMemberId">
                 <div class="form-group">
-                    <label>סוג השתתפות:</label>
-                    <div class="radio-group">
-                        <label>
-                            <input type="radio" name="editParticipationType" value="percentage" onchange="toggleEditParticipationType()">
-                            אחוז
-                        </label>
-                        <label>
-                            <input type="radio" name="editParticipationType" value="fixed" onchange="toggleEditParticipationType()">
-                            סכום קבוע
-                        </label>
+                    <label>איך מתחלקים?</label>
+                    <div class="type-picker">
+                        <input type="radio" name="editParticipationType" id="editParticipationType_shares" value="shares" onchange="toggleEditParticipationType()">
+                        <label for="editParticipationType_shares"><i class="fas fa-users"></i><span>נפשות</span></label>
+                        <input type="radio" name="editParticipationType" id="editParticipationType_percentage" value="percentage" onchange="toggleEditParticipationType()">
+                        <label for="editParticipationType_percentage"><i class="fas fa-percentage"></i><span>אחוז</span></label>
+                        <input type="radio" name="editParticipationType" id="editParticipationType_fixed" value="fixed" onchange="toggleEditParticipationType()">
+                        <label for="editParticipationType_fixed"><i class="fas fa-shekel-sign"></i><span>סכום קבוע</span></label>
                     </div>
                 </div>
                 <div class="form-group">
-                    <label for="editMemberValue">ערך השתתפות:</label>
+                    <label for="editMemberValue" id="editMemberValueLabel">ערך השתתפות:</label>
                     <div class="input-with-suffix">
                         <input type="number" id="editMemberValue" step="0.01" min="0.01" required>
                         <span id="editValueSuffix">%</span>

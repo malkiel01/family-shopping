@@ -842,3 +842,80 @@ body {
     border: none;
     cursor: pointer;
 }
+
+/* המודל נפתח דרך מחלקה ולא דרך סגנון מוטבע, כדי ש-CSS
+   של מובייל יוכל להחליף אותו לגיליון תחתון */
+.modal.is-open {
+    display: block;
+}
+
+/* ============================================================
+   בורר סוג ההשתתפות
+   ------------------------------------------------------------
+   החליף רדיו־באטנים רגילים שנשברו ב-RTL: התוויות נדחפו לקצה
+   אחד והעיגולים נשארו באמצע, ו"סכום קבוע" נשבר לשתי שורות.
+   ============================================================ */
+
+.type-picker {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-top: 8px;
+}
+
+/* הרדיו עצמו מוסתר אבל נשאר נגיש למקלדת ולקורא מסך */
+.type-picker input[type="radio"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.type-picker label {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 12px 6px;
+    min-height: 72px;
+    background: #f8f9fa;
+    border: 2px solid #e9ecef;
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    color: #555;
+    text-align: center;
+    line-height: 1.2;
+    transition: all 0.18s;
+}
+
+.type-picker label i {
+    font-size: 18px;
+    color: #667eea;
+    transition: color 0.18s;
+}
+
+.type-picker label:hover {
+    border-color: #c7cdfb;
+}
+
+.type-picker input[type="radio"]:checked + label {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-color: transparent;
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.35);
+}
+
+.type-picker input[type="radio"]:checked + label i {
+    color: #fff;
+}
+
+/* מסגרת ברורה בניווט מקלדת */
+.type-picker input[type="radio"]:focus-visible + label {
+    outline: 2px solid #667eea;
+    outline-offset: 2px;
+}
+

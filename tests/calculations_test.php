@@ -143,5 +143,57 @@ check('סך ההעברות מתאזן', array_sum($net), 0, 0.001);
 $sumShould = 0; foreach ($r['calculations'] as $c) $sumShould += $c['shouldPay'];
 check('סך "צריך לשלם" = סך ההוצאות', $sumShould, 523.40+217.15+88.90);
 
+// ---- 13. חלוקה לפי נפשות
+echo "\n13. חלוקה לפי נפשות\n";
+// שלוש משפחות: 4, 2 ו-2 נפשות. סה\"כ 8 נפשות, קנייה של 800.
+$mS = [member(1,'משפחה גדולה','shares',4), member(2,'זוג','shares',2), member(3,'זוג ב','shares',2)];
+$pS = [['id'=>1,'member_id'=>1,'amount'=>800,'excluded_ids'=>[]]];
+$r  = calculateGroupBalance($mS,$pS);
+check('משפחה של 4 משלמת חצי', byNick($r,'משפחה גדולה')['shouldPay'], 400);
+check('זוג משלם רבע', byNick($r,'זוג')['shouldPay'], 200);
+check('אין סכום לא מוקצה', $r['unallocated'], 0);
+check('הכיסוי מלא', $r['coveragePercentage'], 100);
+$sum = 0; foreach ($r['calculations'] as $c) $sum += $c['shouldPay'];
+check('הכל חולק', $sum, 800);
+
+echo "\n13ב. נפשות יחד עם אחוז מפורש\n";
+// אחד על 40%, והשאר מתחלקים ב-60% שנותרו לפי 3 ו-1 נפשות
+$mS2 = [member(1,'קבוע','percentage',40), member(2,'שלוש נפשות','shares',3), member(3,'נפש אחת','shares',1)];
+$pS2 = [['id'=>1,'member_id'=>1,'amount'=>1000,'excluded_ids'=>[]]];
+$r   = calculateGroupBalance($mS2,$pS2);
+check('בעל האחוז המפורש משלם 40%', byNick($r,'קבוע')['shouldPay'], 400);
+check('שלוש נפשות מקבלות 45%', byNick($r,'שלוש נפשות')['shouldPay'], 450);
+check('נפש אחת מקבלת 15%', byNick($r,'נפש אחת')['shouldPay'], 150);
+check('אין שארית', $r['unallocated'], 0);
+
+echo "\n13ג. החרגה בתוך חלוקת נפשות\n";
+// אותן שלוש משפחות, אבל הזוג השני לא משתתף בקנייה הזו
+$pS3 = [['id'=>1,'member_id'=>1,'amount'=>600,'excluded_ids'=>[3]]];
+$r   = calculateGroupBalance($mS,$pS3);
+check('משפחה של 4 מתוך 6 נפשות משתתפות', byNick($r,'משפחה גדולה')['shouldPay'], 400);
+check('זוג משתתף מתוך 6', byNick($r,'זוג')['shouldPay'], 200);
+check('המוחרג לא משלם', byNick($r,'זוג ב')['shouldPay'], 0);
+check('חלקו התגלגל על השאר ולא נוצר חור', $r['unallocated'], 0);
+
+echo "\n13ד. נפשות יחד עם סכום קבוע\n";
+$mS4 = [member(1,'קבוע','fixed',100), member(2,'שתי נפשות','shares',2), member(3,'שלוש נפשות','shares',3)];
+$pS4 = [['id'=>1,'member_id'=>2,'amount'=>500,'excluded_ids'=>[]]];
+$r   = calculateGroupBalance($mS4,$pS4);
+check('בעל הסכום הקבוע משלם 100', byNick($r,'קבוע')['shouldPay'], 100);
+check('שתי נפשות מ-400 שנותרו', byNick($r,'שתי נפשות')['shouldPay'], 160);
+check('שלוש נפשות מ-400 שנותרו', byNick($r,'שלוש נפשות')['shouldPay'], 240);
+$sum = 0; foreach ($r['calculations'] as $c) $sum += $c['shouldPay'];
+check('הכל חולק', $sum, 500);
+
+echo "\n13ה. מקרי קצה\n";
+$rEmpty = calculateGroupBalance([member(1,'א','shares',0)], [['id'=>1,'member_id'=>1,'amount'=>100,'excluded_ids'=>[]]]);
+check('אפס נפשות לא מפיל את החישוב', $rEmpty['totalAmount'], 100);
+$rFull = calculateGroupBalance(
+    [member(1,'מלא','percentage',100), member(2,'נפשות','shares',3)],
+    [['id'=>1,'member_id'=>1,'amount'=>200,'excluded_ids'=>[]]]
+);
+check('כשהאחוזים כבר 100, לנפשות לא נשאר כלום', byNick($rFull,'נפשות')['shouldPay'], 0);
+check('ובעל ה-100% משלם הכל', byNick($rFull,'מלא')['shouldPay'], 200);
+
 echo "\n" . str_repeat('=',50) . "\nעבר: $pass | נכשל: $fail\n";
 exit($fail > 0 ? 1 : 0);

@@ -75,12 +75,26 @@ $members = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // --- סך ההשתתפות ---
 $totalPercentage = 0.0;
+$hasShareMembers = false;
 foreach ($members as $member) {
     if ($member['participation_type'] === 'percentage') {
         $totalPercentage += (float)$member['participation_value'];
+    } elseif ($member['participation_type'] === 'shares') {
+        $hasShareMembers = true;
     }
 }
-$available_percentage = round(100 - $totalPercentage, 2);
+
+// משתתפי נפשות סופגים את כל מה שנשאר, ולכן כשיש כאלה אין
+// "אחוזים חסרים" - החלוקה מלאה מעצם הגדרתה
+$available_percentage = $hasShareMembers ? 0.0 : round(100 - $totalPercentage, 2);
+
+// האחוז האפקטיבי של כל משתתף נפשות, לתצוגה בלבד
+$sharePercentages = [];
+foreach (normalizeShareMembers($members) as $normalized) {
+    if (isset($normalized['shares'])) {
+        $sharePercentages[(int)$normalized['id']] = (float)$normalized['participation_value'];
+    }
+}
 
 // --- הזמנות ממתינות (רק למנהל) ---
 $pending_invitations = [];
@@ -441,7 +455,17 @@ $canEdit = !$is_closed;
                         <h3><?php echo htmlspecialchars($member['nickname']); ?></h3>
                         <p class="member-email"><?php echo htmlspecialchars($member['email']); ?></p>
                         <p class="member-participation">
-                            <?php if ($member['participation_type'] === 'percentage'): ?>
+                            <?php if ($member['participation_type'] === 'shares'): ?>
+                                <span class="shares-badge">
+                                    <i class="fas fa-users"></i>
+                                    <?php echo (int)$member['participation_value']; ?> נפשות
+                                </span>
+                                <?php if (isset($sharePercentages[(int)$member['id']])): ?>
+                                    <span class="share-equiv">
+                                        ≈<?php echo round($sharePercentages[(int)$member['id']], 1); ?>%
+                                    </span>
+                                <?php endif; ?>
+                            <?php elseif ($member['participation_type'] === 'percentage'): ?>
                                 <i class="fas fa-percentage"></i> <?php echo $member['participation_value']; ?>%
                             <?php else: ?>
                                 <i class="fas fa-shekel-sign"></i> ₪<?php echo number_format($member['participation_value'], 2); ?>

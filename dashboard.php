@@ -8,6 +8,7 @@ require_once 'config.php';
 require_once 'includes/auth_check.php';
 require_once 'includes/schema.php';
 require_once 'includes/notifications.php';
+require_once 'includes/participation.php';
 
 $pdo     = getDBConnection();
 $user_id = $_SESSION['user_id'];
@@ -27,15 +28,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $description = trim($_POST['description'] ?? '');
             $eventDate   = trim($_POST['event_date'] ?? '');
             $location    = trim($_POST['event_location'] ?? '');
-            $type        = ($_POST['participation_type'] ?? '') === 'fixed' ? 'fixed' : 'percentage';
-            $value       = round(floatval($_POST['participation_value'] ?? 0), 2);
+            $type        = participationTypeFromRequest();
+            $value       = participationValueFromRequest($type);
 
             if ($name === '') {
                 echo json_encode(['success' => false, 'message' => 'יש להזין שם לאירוע']);
                 exit;
             }
             if ($value <= 0) {
-                echo json_encode(['success' => false, 'message' => 'ערך ההשתתפות חייב להיות חיובי']);
+                echo json_encode(['success' => false, 'message' => $type === 'shares'
+                    ? 'מספר הנפשות חייב להיות לפחות 1'
+                    : 'ערך ההשתתפות חייב להיות חיובי']);
                 exit;
             }
             if ($type === 'percentage' && $value > 100) {
@@ -469,22 +472,18 @@ function eventDateLabel($date) {
                 </div>
                 <?php endif; ?>
                 <div class="form-group">
-                    <label>סוג ההשתתפות שלך:</label>
-                    <div class="radio-group">
-                        <label>
-                            <input type="radio" name="ownerParticipationType" value="percentage" checked
-                                   onchange="toggleOwnerParticipationType()">
-                            אחוז
-                        </label>
-                        <label>
-                            <input type="radio" name="ownerParticipationType" value="fixed"
-                                   onchange="toggleOwnerParticipationType()">
-                            סכום קבוע
-                        </label>
+                    <label>איך מתחלקים?</label>
+                    <div class="type-picker">
+                        <input type="radio" name="ownerParticipationType" id="ownerType_shares" value="shares" checked onchange="toggleOwnerParticipationType()">
+                        <label for="ownerType_shares"><i class="fas fa-users"></i><span>נפשות</span></label>
+                        <input type="radio" name="ownerParticipationType" id="ownerType_percentage" value="percentage" onchange="toggleOwnerParticipationType()">
+                        <label for="ownerType_percentage"><i class="fas fa-percentage"></i><span>אחוז</span></label>
+                        <input type="radio" name="ownerParticipationType" id="ownerType_fixed" value="fixed" onchange="toggleOwnerParticipationType()">
+                        <label for="ownerType_fixed"><i class="fas fa-shekel-sign"></i><span>סכום קבוע</span></label>
                     </div>
                 </div>
                 <div class="form-group">
-                    <label for="ownerParticipationValue">ערך ההשתתפות שלך:</label>
+                    <label for="ownerParticipationValue" id="ownerValueLabel">כמה נפשות?</label>
                     <div class="input-with-suffix">
                         <input type="number" id="ownerParticipationValue" step="0.01" min="0.01" required>
                         <span id="ownerValueSuffix">%</span>

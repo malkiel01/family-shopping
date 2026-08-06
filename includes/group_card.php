@@ -58,13 +58,19 @@ $dateLabel = eventDateLabel($group['event_date'] ?? null);
 
     <div class="group-info">
         <p><i class="fas fa-user"></i> מנהל: <?php echo htmlspecialchars($group['owner_name']); ?></p>
-        <p><i class="fas fa-percentage"></i> החלק שלך:
-            <?php if ($group['participation_type'] === 'percentage'): ?>
-                <?php echo $group['participation_value']; ?>%
-            <?php else: ?>
-                ₪<?php echo number_format($group['participation_value'], 2); ?>
-            <?php endif; ?>
+        <?php if ($group['participation_type'] === 'shares'): ?>
+        <p><i class="fas fa-users"></i> החלק שלך:
+            <?php echo (int)$group['participation_value']; ?> נפשות
         </p>
+        <?php elseif ($group['participation_type'] === 'percentage'): ?>
+        <p><i class="fas fa-percentage"></i> החלק שלך:
+            <?php echo $group['participation_value']; ?>%
+        </p>
+        <?php else: ?>
+        <p><i class="fas fa-shekel-sign"></i> החלק שלך:
+            ₪<?php echo number_format($group['participation_value'], 2); ?>
+        </p>
+        <?php endif; ?>
         <?php if ($isClosed): ?>
         <p class="closed-note"><i class="fas fa-lock"></i> האירוע נסגר</p>
         <?php endif; ?>

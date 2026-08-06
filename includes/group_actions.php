@@ -4,6 +4,7 @@
 
 require_once __DIR__ . '/upload.php';
 require_once __DIR__ . '/notifications.php';
+require_once __DIR__ . '/participation.php';
 
 /**
  * הקשר הבקשה - נשמר פעם אחת כדי שכל פונקציה תדע
@@ -133,8 +134,8 @@ function handleGroupActions($pdo, $group_id, $user_id, $is_owner, $member_id, $s
 function actionAddMember(GroupContext $context) {
     $email              = trim($_POST['email'] ?? '');
     $nickname           = trim($_POST['nickname'] ?? '');
-    $participationType  = ($_POST['participation_type'] ?? '') === 'fixed' ? 'fixed' : 'percentage';
-    $participationValue = round(floatval($_POST['participation_value'] ?? 0), 2);
+    $participationType  = participationTypeFromRequest();
+    $participationValue = participationValueFromRequest($participationType);
 
     if ($email === '' || $nickname === '') {
         jsonFail('יש למלא אימייל וכינוי');
@@ -147,7 +148,9 @@ function actionAddMember(GroupContext $context) {
     }
 
     if ($participationValue <= 0) {
-        jsonFail('ערך ההשתתפות חייב להיות חיובי');
+        jsonFail($participationType === 'shares'
+            ? 'מספר הנפשות חייב להיות לפחות 1'
+            : 'ערך ההשתתפות חייב להיות חיובי');
         return;
     }
 
@@ -392,11 +395,13 @@ function actionRemoveMember(GroupContext $context) {
 
 function actionEditMember(GroupContext $context) {
     $memberId           = intval($_POST['member_id'] ?? 0);
-    $participationType  = ($_POST['participation_type'] ?? '') === 'fixed' ? 'fixed' : 'percentage';
-    $participationValue = round(floatval($_POST['participation_value'] ?? 0), 2);
+    $participationType  = participationTypeFromRequest();
+    $participationValue = participationValueFromRequest($participationType);
 
     if ($participationValue <= 0) {
-        jsonFail('ערך ההשתתפות חייב להיות חיובי');
+        jsonFail($participationType === 'shares'
+            ? 'מספר הנפשות חייב להיות לפחות 1'
+            : 'ערך ההשתתפות חייב להיות חיובי');
         return;
     }
 
@@ -415,10 +420,7 @@ function actionEditMember(GroupContext $context) {
     ");
     $stmt->execute([$participationType, $participationValue, $memberId, $context->groupId]);
 
-    $symbol = defined('CURRENCY_SYMBOL') ? CURRENCY_SYMBOL : '₪';
-    $share  = $participationType === 'percentage'
-        ? $participationValue . '%'
-        : $symbol . number_format($participationValue, 2);
+    $share = participationLabel($participationType, $participationValue);
 
     notifyMember(
         $context, $memberId, 'share_changed',

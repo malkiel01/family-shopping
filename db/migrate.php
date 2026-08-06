@@ -285,6 +285,57 @@ step(
     }
 );
 
+// ============================================================
+echo "\nמיגרציה 004 - חלוקה לפי נפשות\n";
+echo str_repeat('=', 60) . "\n";
+
+step(
+    "סוג השתתפות 'shares'",
+    function () use ($pdo, $dbName) {
+        $stmt = $pdo->prepare("
+            SELECT COLUMN_TYPE FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'group_members'
+              AND COLUMN_NAME = 'participation_type'
+        ");
+        $stmt->execute([$dbName]);
+        $type = (string)$stmt->fetchColumn();
+
+        return $type !== '' && strpos($type, "'shares'") === false;
+    },
+    function () use ($pdo) {
+        // הערכים הקיימים נשמרים כפי שהם; רק נוסף ערך אפשרי חדש
+        $pdo->exec("
+            ALTER TABLE `group_members`
+            MODIFY COLUMN `participation_type`
+                ENUM('percentage','fixed','auto_percentage','shares')
+                NOT NULL DEFAULT 'percentage'
+        ");
+    }
+);
+
+step(
+    "סוג השתתפות 'shares' בהזמנות",
+    function () use ($pdo, $dbName) {
+        $stmt = $pdo->prepare("
+            SELECT COLUMN_TYPE FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'group_invitations'
+              AND COLUMN_NAME = 'participation_type'
+        ");
+        $stmt->execute([$dbName]);
+        $type = (string)$stmt->fetchColumn();
+
+        return $type !== '' && strpos($type, "'shares'") === false;
+    },
+    function () use ($pdo) {
+        $pdo->exec("
+            ALTER TABLE `group_invitations`
+            MODIFY COLUMN `participation_type`
+                ENUM('percentage','fixed','auto_percentage','shares')
+                NOT NULL DEFAULT 'percentage'
+        ");
+    }
+);
+
 echo str_repeat('=', 60) . "\n";
 echo "בוצעו: $applied | דילוגים: $skipped | כשלונות: $failed\n";
 

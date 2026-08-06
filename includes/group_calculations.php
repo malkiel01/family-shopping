@@ -26,7 +26,55 @@
  * @param array $purchases   קניות: id, member_id, amount, excluded_ids (מערך member_id)
  * @param array $settlements העברות שכבר בוצעו: from_member_id, to_member_id, amount
  */
+/**
+ * ממיר משתתפים שמוגדרים לפי נפשות לאחוזים.
+ *
+ * "נפשות" הוא הביטוי הטבעי לאירוע משפחתי: משפחה של ארבעה משלמת
+ * כפול ממשפחה של שניים, בלי שאיש יחשב אחוזים בראש.
+ *
+ * מבחינת החישוב זו בסך הכל דרך נוחה לכתוב אחוזים: חברי הנפשות
+ * מתחלקים ביניהם ביתרה שנשארה אחרי האחוזים שהוגדרו במפורש, לפי
+ * היחס בין מספרי הנפשות שלהם. אחרי ההמרה כל שאר החישוב ממשיך
+ * לעבוד בדיוק כמו קודם, בלי לדעת שקיים סוג כזה.
+ *
+ * דוגמה: אחד על 40%, ושניים על 3 ו-1 נפשות. הפול הוא 60%,
+ * ולכן הם מקבלים 45% ו-15%.
+ */
+function normalizeShareMembers(array $members) {
+    $explicitPercentage = 0.0;
+    $totalShares        = 0.0;
+
+    foreach ($members as $member) {
+        if ($member['participation_type'] === 'shares') {
+            $totalShares += (float)$member['participation_value'];
+        } elseif ($member['participation_type'] === 'percentage') {
+            $explicitPercentage += (float)$member['participation_value'];
+        }
+    }
+
+    if ($totalShares <= 0) {
+        return $members;
+    }
+
+    $pool = max(0.0, 100.0 - $explicitPercentage);
+
+    foreach ($members as &$member) {
+        if ($member['participation_type'] !== 'shares') {
+            continue;
+        }
+
+        $member['shares']              = (float)$member['participation_value'];
+        $member['participation_type']  = 'percentage';
+        $member['participation_value'] = $pool * ((float)$member['participation_value'] / $totalShares);
+    }
+    unset($member);
+
+    return $members;
+}
+
 function calculateGroupBalance(array $members, array $purchases, array $settlements = []) {
+    $members = normalizeShareMembers($members);
+
     $result = [
         'totalAmount'        => 0.0,
         'calculations'       => [],
@@ -373,7 +421,11 @@ function renderCalculationsView(array $members, array $result, $canSettle, array
             <div class="calc-member">
                 <h4><?php echo htmlspecialchars($calculation['member']['nickname']); ?></h4>
                 <span class="participation-info">
-                    <?php if ($calculation['member']['participation_type'] === 'percentage'): ?>
+                    <?php if (isset($calculation['member']['shares'])): ?>
+                        <?php // המשתתף הוגדר בנפשות, וההמרה לאחוז מוצגת לצידן ?>
+                        <?php echo (int)$calculation['member']['shares']; ?> נפשות
+                        (<?php echo round($calculation['member']['participation_value'], 1); ?>%)
+                    <?php elseif ($calculation['member']['participation_type'] === 'percentage'): ?>
                         <?php echo $calculation['member']['participation_value']; ?>%
                     <?php else: ?>
                         ₪<?php echo number_format($calculation['member']['participation_value'], 2); ?> קבוע

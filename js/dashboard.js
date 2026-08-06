@@ -44,19 +44,37 @@ async function callAction(action, fields = {}) {
 // ============================================================
 
 function showCreateGroupModal() {
-    document.getElementById('createGroupModal').style.display = 'block';
+    document.getElementById('createGroupModal').classList.add('is-open');
     document.getElementById('groupName').focus();
 }
 
 function closeCreateGroupModal() {
-    document.getElementById('createGroupModal').style.display = 'none';
+    document.getElementById('createGroupModal').classList.remove('is-open');
     document.getElementById('createGroupForm').reset();
     toggleOwnerParticipationType();
 }
 
+/** מה שמשתנה בטופס לפי סוג ההשתתפות שנבחר */
+const OWNER_PARTICIPATION_UI = {
+    shares:     { label: 'כמה נפשות?',  suffix: 'נפשות', step: '1',    min: '1' },
+    percentage: { label: 'איזה אחוז?',  suffix: '%',     step: '0.01', min: '0.01' },
+    fixed:      { label: 'איזה סכום?',  suffix: '₪',     step: '0.01', min: '0.01' }
+};
+
 function toggleOwnerParticipationType() {
-    const type = document.querySelector('input[name="ownerParticipationType"]:checked').value;
-    document.getElementById('ownerValueSuffix').textContent = type === 'percentage' ? '%' : '₪';
+    const type  = document.querySelector('input[name="ownerParticipationType"]:checked').value;
+    const ui    = OWNER_PARTICIPATION_UI[type] || OWNER_PARTICIPATION_UI.percentage;
+    const input = document.getElementById('ownerParticipationValue');
+
+    document.getElementById('ownerValueLabel').textContent  = ui.label;
+    document.getElementById('ownerValueSuffix').textContent = ui.suffix;
+    input.step = ui.step;
+    input.min  = ui.min;
+
+    // נפשות הן מספר שלם
+    if (type === 'shares' && input.value) {
+        input.value = Math.max(1, Math.round(parseFloat(input.value) || 1));
+    }
 }
 
 window.onclick = function (event) {

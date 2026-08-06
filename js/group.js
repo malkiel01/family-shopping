@@ -69,12 +69,12 @@ function showTab(tabName, element) {
 
 function openModal(id) {
     const modal = document.getElementById(id);
-    if (modal) modal.style.display = 'block';
+    if (modal) modal.classList.add('is-open');
 }
 
 function closeModal(id) {
     const modal = document.getElementById(id);
-    if (modal) modal.style.display = 'none';
+    if (modal) modal.classList.remove('is-open');
 }
 
 window.onclick = function (event) {
@@ -83,13 +83,13 @@ window.onclick = function (event) {
     if (event.target.id === 'inviteLinkModal') {
         closeInviteLinkModal();
     } else {
-        event.target.style.display = 'none';
+        event.target.classList.remove('is-open');
     }
 };
 
 document.addEventListener('keydown', function (event) {
     if (event.key === 'Escape') {
-        document.querySelectorAll('.modal').forEach(modal => modal.style.display = 'none');
+        document.querySelectorAll('.modal').forEach(modal => modal.classList.remove('is-open'));
     }
 });
 
@@ -106,24 +106,72 @@ function closeAddMemberModal() {
     document.getElementById('addMemberForm').reset();
 }
 
+/**
+ * כל מה שמשתנה במסך לפי סוג ההשתתפות שנבחר.
+ * "נפשות" הוא הסוג הטבעי לאירוע משפחתי, ולכן הוא ברירת המחדל.
+ */
+const PARTICIPATION_UI = {
+    shares: {
+        label:  'כמה נפשות?',
+        suffix: 'נפשות',
+        step:   '1',
+        min:    '1',
+        hint:   'משפחה של ארבעה משלמת כפול ממשפחה של שניים. החלוקה מחושבת לפי היחס בין כולם'
+    },
+    percentage: {
+        label:  'איזה אחוז?',
+        suffix: '%',
+        step:   '0.01',
+        min:    '0.01',
+        hint:   null   // נכתב בנפרד, כי הוא תלוי במה שנותר להקצאה
+    },
+    fixed: {
+        label:  'איזה סכום?',
+        suffix: '₪',
+        step:   '0.01',
+        min:    '0.01',
+        hint:   'סכום קבוע בשקלים, שלא מושפע מהחלוקה של השאר'
+    }
+};
+
+/** מחיל את הגדרות הסוג על שדה הערך, התווית והרמז */
+function applyParticipationUI(type, ids) {
+    const ui    = PARTICIPATION_UI[type] || PARTICIPATION_UI.percentage;
+    const input = document.getElementById(ids.input);
+
+    document.getElementById(ids.label).textContent  = ui.label;
+    document.getElementById(ids.suffix).textContent = ui.suffix;
+    input.step = ui.step;
+    input.min  = ui.min;
+
+    // נפשות הן מספר שלם - אין חצי נפש
+    if (type === 'shares' && input.value) {
+        input.value = Math.max(1, Math.round(parseFloat(input.value) || 1));
+    }
+
+    document.getElementById(ids.hint).textContent = ui.hint !== null
+        ? ui.hint
+        : `נותרו ${CONFIG.availablePercentage}% זמינים להקצאה`;
+}
+
 function toggleParticipationType() {
     const type = document.querySelector('input[name="participationType"]:checked').value;
-    document.getElementById('valueSuffix').textContent = type === 'percentage' ? '%' : '₪';
-    updatePercentageInfo();
+
+    applyParticipationUI(type, {
+        input:  'memberValue',
+        label:  'memberValueLabel',
+        suffix: 'valueSuffix',
+        hint:   'percentageInfo'
+    });
 }
 
 function updatePercentageInfo() {
-    const type = document.querySelector('input[name="participationType"]:checked').value;
-    const info = document.getElementById('percentageInfo');
-
-    info.textContent = type === 'percentage'
-        ? `נותרו ${CONFIG.availablePercentage}% זמינים להקצאה`
-        : 'סכום קבוע - המשתתף ישלם סכום זה ללא קשר לאחוזים';
+    toggleParticipationType();
 }
 
 function editMember(memberId, type, value) {
     document.getElementById('editMemberId').value = memberId;
-    document.getElementById('editMemberValue').value = value;
+    document.getElementById('editMemberValue').value = type === 'shares' ? Math.round(value) : value;
     document.querySelector(`input[name="editParticipationType"][value="${type}"]`).checked = true;
     toggleEditParticipationType();
     openModal('editMemberModal');
@@ -135,10 +183,13 @@ function closeEditMemberModal() {
 
 function toggleEditParticipationType() {
     const type = document.querySelector('input[name="editParticipationType"]:checked').value;
-    document.getElementById('editValueSuffix').textContent = type === 'percentage' ? '%' : '₪';
-    document.getElementById('editPercentageInfo').textContent = type === 'percentage'
-        ? 'הערך הכולל של כל המשתתפים לא יכול לעבור 100%'
-        : 'סכום קבוע בשקלים';
+
+    applyParticipationUI(type, {
+        input:  'editMemberValue',
+        label:  'editMemberValueLabel',
+        suffix: 'editValueSuffix',
+        hint:   'editPercentageInfo'
+    });
 }
 
 function removeMember(memberId) {

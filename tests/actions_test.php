@@ -479,6 +479,46 @@ foreach (['addItem' => ['title' => 'פיתות'], 'closeEvent' => [], 'addSettle
         $r['message'] ?? '');
 }
 
+// ------------------------------------------------------------
+echo "\n12. חלוקה לפי נפשות\n";
+// ------------------------------------------------------------
+$pdoN = makeDb();
+
+$r = run($pdoN, 'editMember', [
+    'member_id' => 2, 'participation_type' => 'shares', 'participation_value' => 4,
+], 1, true, 1);
+check('נפשות מתקבלות כסוג השתתפות', $r['success'] === true, $r['message'] ?? '');
+
+$row = $pdoN->query("SELECT participation_type, participation_value FROM group_members WHERE id = 2")->fetch();
+check('הסוג נשמר', $row['participation_type'] === 'shares', $row['participation_type']);
+check('הערך נשמר', (float)$row['participation_value'] === 4.0);
+
+// חצי נפש היא לא דבר קיים
+$r = run($pdoN, 'editMember', [
+    'member_id' => 3, 'participation_type' => 'shares', 'participation_value' => 2.6,
+], 1, true, 1);
+$row = $pdoN->query("SELECT participation_value FROM group_members WHERE id = 3")->fetch();
+check('ערך שבור מעוגל למספר שלם', (float)$row['participation_value'] === 3.0, $row['participation_value']);
+
+$r = run($pdoN, 'editMember', [
+    'member_id' => 2, 'participation_type' => 'shares', 'participation_value' => 0,
+], 1, true, 1);
+check('אפס נפשות נדחה', $r['success'] === false);
+check('ההודעה מדברת על נפשות', mb_strpos($r['message'] ?? '', 'נפשות') !== false, $r['message'] ?? '');
+
+// תקרת ה-100% לא חלה על נפשות: הן סופגות את מה שנשאר
+$r = run($pdoN, 'editMember', [
+    'member_id' => 2, 'participation_type' => 'shares', 'participation_value' => 99,
+], 1, true, 1);
+check('נפשות אינן כפופות לתקרת ה-100%', $r['success'] === true, $r['message'] ?? '');
+
+// סוג לא מוכר נופל בחזרה לאחוזים ולא נכתב כפי שהוא
+$r = run($pdoN, 'editMember', [
+    'member_id' => 3, 'participation_type' => 'zzz', 'participation_value' => 10,
+], 1, true, 1);
+$row = $pdoN->query("SELECT participation_type FROM group_members WHERE id = 3")->fetch();
+check('סוג לא מוכר לא נכנס למסד', $row['participation_type'] === 'percentage', $row['participation_type']);
+
 echo "\n" . str_repeat('=', 55) . "\n";
 echo "עבר: $pass | נכשל: $fail\n";
 exit($fail > 0 ? 1 : 0);
