@@ -58,6 +58,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
 require_once 'includes/group_calculations.php';
 require_once 'includes/group_modals.php';
+require_once 'includes/contacts.php';
+
+// אנשי הקשר של המשתמש, לבורר שבמסך צירוף משתתף
+$myContacts = $is_owner ? listContacts($pdo, $user_id) : [];
 
 // --- משתתפים ---
 $stmt = $pdo->prepare("
@@ -663,7 +667,7 @@ $canEdit = !$is_closed;
     <!-- Modals -->
     <?php
     if ($is_owner) {
-        renderAddMemberModal($available_percentage);
+        renderAddMemberModal($available_percentage, $myContacts);
         renderEditMemberModal();
         renderSplitSettingsModal($currentSplitMode, $groupShareRate ?? 0);
     }

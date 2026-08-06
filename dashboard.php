@@ -354,6 +354,9 @@ function eventDateLabel($date) {
                 האירועים שלי
             </a>
             <div class="navbar-user">
+                <a href="contacts.php" class="btn-gear" title="אנשי קשר" aria-label="אנשי קשר">
+                    <i class="fas fa-address-book"></i>
+                </a>
                 <div class="user-info">
                     <div class="user-avatar">
                         <?php if (!empty($_SESSION['profile_picture'])): ?>

@@ -919,3 +919,28 @@ body {
     outline-offset: 2px;
 }
 
+
+/* גלגל השיניים פותח את הגדרות החלוקה לכל הקבוצה */
+.btn-gear {
+    flex: 0 0 auto;
+    width: 42px;
+    height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #f1f2f7;
+    color: #555b73;
+    border: none;
+    border-radius: 10px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+
+.btn-gear:hover {
+    background: #e6e8f2;
+    color: #667eea;
+}
+
+
+.btn-gear { text-decoration: none; }

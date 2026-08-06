@@ -5,6 +5,7 @@
 require_once __DIR__ . '/upload.php';
 require_once __DIR__ . '/notifications.php';
 require_once __DIR__ . '/participation.php';
+require_once __DIR__ . '/contacts.php';
 
 /**
  * הקשר הבקשה - נשמר פעם אחת כדי שכל פונקציה תדע
@@ -203,6 +204,13 @@ function actionAddMember(GroupContext $context) {
     ]);
 
     $invitationId = $context->pdo->lastInsertId();
+
+    // כל הזמנה מוסיפה את הנמען לאנשי הקשר, כדי שבאירוע הבא
+    // אפשר יהיה לבחור אותו במקום להקליד מחדש
+    rememberContact(
+        $context->pdo, $context->userId, $email, $nickname,
+        $participationType, $participationValue
+    );
 
     // המשתמש כבר רשום - נכניס התראה לתור
     if ($user) {

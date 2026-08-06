@@ -37,7 +37,7 @@ function renderParticipantPicker($members, $idPrefix) {
     <?php
 }
 
-function renderAddMemberModal($available_percentage) {
+function renderAddMemberModal($available_percentage, array $contacts = []) {
     ?>
     <div id="addMemberModal" class="modal">
         <div class="modal-content">
@@ -46,6 +46,28 @@ function renderAddMemberModal($available_percentage) {
                 <span class="close" onclick="closeAddMemberModal()">&times;</span>
             </div>
             <form id="addMemberForm">
+                <?php if (count($contacts) > 0): ?>
+                <?php // בחירה מאנשי הקשר ממלאת את השדות מאליה,
+                      // כדי לא להקליד שוב אימייל וכינוי בכל אירוע ?>
+                <div class="form-group">
+                    <label for="contactPicker">בחר מאנשי הקשר:</label>
+                    <select id="contactPicker" onchange="fillFromContact()">
+                        <option value="">הקלדה ידנית...</option>
+                        <?php foreach ($contacts as $contact): ?>
+                        <option value="<?php echo htmlspecialchars($contact['email']); ?>"
+                                data-name="<?php echo htmlspecialchars($contact['name']); ?>"
+                                data-type="<?php echo htmlspecialchars((string)$contact['default_participation_type']); ?>"
+                                data-value="<?php echo (float)$contact['default_participation_value']; ?>">
+                            <?php echo htmlspecialchars($contact['name']); ?>
+                            — <?php echo htmlspecialchars($contact['email']); ?>
+                        </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <small class="form-hint">
+                        <a href="<?php echo APP_BASE_PATH; ?>/contacts.php">ניהול אנשי הקשר</a>
+                    </small>
+                </div>
+                <?php endif; ?>
                 <div class="form-group">
                     <label for="memberEmail">אימייל:</label>
                     <input type="email" id="memberEmail" required>

@@ -655,3 +655,31 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 });
+
+/** ממלא את טופס צירוף המשתתף מתוך איש קשר שנבחר */
+function fillFromContact() {
+    const picker = document.getElementById('contactPicker');
+    const option = picker.options[picker.selectedIndex];
+
+    if (!picker.value) {
+        return;
+    }
+
+    document.getElementById('memberEmail').value    = picker.value;
+    document.getElementById('memberNickname').value = option.dataset.name || '';
+
+    // ברירת המחדל של ההשתתפות, אם נשמרה לאיש הקשר
+    const type = option.dataset.type;
+    if (type) {
+        const radio = document.querySelector(`input[name="participationType"][value="${type}"]`);
+        if (radio) {
+            radio.checked = true;
+            toggleParticipationType();
+        }
+    }
+
+    const value = parseFloat(option.dataset.value);
+    if (value > 0) {
+        document.getElementById('memberValue').value = value;
+    }
+}

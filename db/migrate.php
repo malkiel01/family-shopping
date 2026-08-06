@@ -357,6 +357,62 @@ step(
     }
 );
 
+// ============================================================
+echo "\nמיגרציה 006 - אנשי קשר\n";
+echo str_repeat('=', 60) . "\n";
+
+step(
+    'טבלה contacts',
+    function () use ($pdo, $dbName) {
+        return !tableExists($pdo, $dbName, 'contacts');
+    },
+    function () use ($pdo) {
+        // רשימת אנשי הקשר שייכת למשתמש ולא לאירוע, ולכן היא
+        // נצברת מכל הקבוצות שלו ומשמשת בכל אירוע חדש
+        $pdo->exec("
+            CREATE TABLE `contacts` (
+                `id`                          INT AUTO_INCREMENT PRIMARY KEY,
+                `owner_id`                    INT          NOT NULL,
+                `email`                       VARCHAR(190) NOT NULL,
+                `name`                        VARCHAR(190) NOT NULL,
+                `default_participation_type`  ENUM('percentage','fixed','shares') NULL DEFAULT NULL,
+                `default_participation_value` DECIMAL(10,2) NULL DEFAULT NULL,
+                `times_used`                  INT          NOT NULL DEFAULT 0,
+                `last_used_at`                DATETIME     NULL DEFAULT NULL,
+                `created_at`                  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY `uniq_owner_email` (`owner_id`, `email`),
+                INDEX `idx_contacts_owner` (`owner_id`, `times_used`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+    }
+);
+
+// ייבוא חד-פעמי מההיסטוריה, כדי שהרשימה לא תתחיל ריקה
+step(
+    'ייבוא אנשי קשר מההזמנות הקיימות',
+    function () use ($pdo, $dbName) {
+        if (!tableExists($pdo, $dbName, 'contacts')) {
+            return false;
+        }
+
+        return (int)$pdo->query("SELECT COUNT(*) FROM contacts")->fetchColumn() === 0;
+    },
+    function () use ($pdo) {
+        require_once __DIR__ . '/../includes/contacts.php';
+
+        $owners = $pdo->query("
+            SELECT DISTINCT owner_id FROM purchase_groups WHERE owner_id IS NOT NULL
+        ")->fetchAll(PDO::FETCH_COLUMN);
+
+        $total = 0;
+        foreach ($owners as $ownerId) {
+            $total += importContactsFromHistory($pdo, $ownerId);
+        }
+
+        echo "           (יובאו $total אנשי קשר)\n";
+    }
+);
+
 echo str_repeat('=', 60) . "\n";
 echo "בוצעו: $applied | דילוגים: $skipped | כשלונות: $failed\n";
 

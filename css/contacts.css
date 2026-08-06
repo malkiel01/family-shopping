@@ -1,0 +1,214 @@
+/* css/contacts.css
+   דף אנשי הקשר. נשען על dashboard.css לניווט, למודלים ולכפתורים. */
+
+.contacts-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    background: white;
+    border-radius: 14px;
+    padding: 12px 16px;
+    margin-bottom: 14px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+.contacts-count {
+    font-weight: 700;
+    color: #333;
+    font-size: 15px;
+}
+
+.contacts-head-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.contacts-head-actions .btn-add {
+    padding: 9px 14px;
+    font-size: 14px;
+}
+
+/* --- חיפוש --- */
+.contacts-search {
+    position: relative;
+    margin-bottom: 12px;
+}
+
+.contacts-search i {
+    position: absolute;
+    top: 50%;
+    right: 14px;
+    transform: translateY(-50%);
+    color: #9aa0b8;
+    font-size: 14px;
+    pointer-events: none;
+}
+
+.contacts-search input {
+    width: 100%;
+    padding: 12px 40px 12px 14px;
+    border: none;
+    border-radius: 12px;
+    font-size: 15px;
+    font-family: inherit;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+.contacts-search input:focus {
+    outline: 2px solid #667eea;
+}
+
+/* --- הרשימה --- */
+.contacts-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.contact-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: white;
+    border-radius: 12px;
+    padding: 12px 14px;
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.07);
+}
+
+.contact-avatar {
+    flex-shrink: 0;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    font-weight: 700;
+    font-size: 17px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.contact-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.contact-info h3 {
+    font-size: 15px;
+    color: #333;
+    margin-bottom: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* אימייל שמתחיל בספרות מתהפך בהקשר RTL */
+.contact-email {
+    direction: ltr;
+    text-align: right;
+    unicode-bidi: isolate;
+    font-size: 12px;
+    color: #7b8194;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-bottom: 4px;
+}
+
+.contact-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.contact-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 20px;
+    background: #f1f2f7;
+    color: #616780;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.contact-badge.registered {
+    background: #e6f6ec;
+    color: #1f7a3d;
+}
+
+.contact-uses {
+    font-size: 11px;
+    color: #9aa0b8;
+}
+
+/* --- מצב ריק --- */
+.contacts-empty {
+    background: white;
+    border-radius: 16px;
+    padding: 36px 24px;
+    text-align: center;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.1);
+}
+
+.contacts-empty i {
+    font-size: 44px;
+    color: #c7cbe0;
+    margin-bottom: 14px;
+}
+
+.contacts-empty h2 {
+    font-size: 19px;
+    color: #333;
+    margin-bottom: 8px;
+}
+
+.contacts-empty p {
+    color: #6d7387;
+    font-size: 14px;
+    line-height: 1.55;
+    max-width: 340px;
+    margin: 0 auto 18px;
+}
+
+.contacts-empty .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    width: auto;
+    padding: 11px 22px;
+}
+
+.contacts-no-results {
+    text-align: center;
+    color: white;
+    padding: 24px 0;
+    font-size: 15px;
+}
+
+@media (max-width: 600px) {
+    .contacts-head {
+        padding: 10px 12px;
+    }
+
+    .contacts-head-actions .btn-add {
+        padding: 9px 12px;
+        font-size: 13px;
+    }
+
+    .contact-card {
+        padding: 10px 12px;
+        gap: 10px;
+    }
+
+    .contact-avatar {
+        width: 38px;
+        height: 38px;
+        font-size: 15px;
+    }
+}
