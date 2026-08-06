@@ -40,7 +40,7 @@
  * דוגמה: אחד על 40%, ושניים על 3 ו-1 נפשות. הפול הוא 60%,
  * ולכן הם מקבלים 45% ו-15%.
  */
-function normalizeShareMembers(array $members) {
+function normalizeShareMembers(array $members, $shareRate = null) {
     $explicitPercentage = 0.0;
     $totalShares        = 0.0;
 
@@ -53,6 +53,28 @@ function normalizeShareMembers(array $members) {
     }
 
     if ($totalShares <= 0) {
+        return $members;
+    }
+
+    // מצב "נפשות חלקי": נקבע תעריף קבוע לנפש, ולכן משתתף הנפשות
+    // משלם סכום ידוע מראש - תעריף כפול מספר הנפשות - בדיוק כמו
+    // משתתף בסכום קבוע. היתרה מתחלקת בין בעלי האחוזים.
+    //
+    // זה נדרש כשחלק מהמשתתפים באחוזים וחלקם בנפשות: בלי תעריף
+    // אין שום דרך לתרגם "3 נפשות" למספר שאפשר להשוות ל-"20%".
+    if ($shareRate !== null && (float)$shareRate > 0) {
+        foreach ($members as &$member) {
+            if ($member['participation_type'] !== 'shares') {
+                continue;
+            }
+
+            $member['shares']              = (float)$member['participation_value'];
+            $member['shareRate']           = (float)$shareRate;
+            $member['participation_type']  = 'fixed';
+            $member['participation_value'] = (float)$shareRate * (float)$member['participation_value'];
+        }
+        unset($member);
+
         return $members;
     }
 
@@ -72,8 +94,8 @@ function normalizeShareMembers(array $members) {
     return $members;
 }
 
-function calculateGroupBalance(array $members, array $purchases, array $settlements = []) {
-    $members = normalizeShareMembers($members);
+function calculateGroupBalance(array $members, array $purchases, array $settlements = [], $shareRate = null) {
+    $members = normalizeShareMembers($members, $shareRate);
 
     $result = [
         'totalAmount'        => 0.0,

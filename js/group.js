@@ -595,3 +595,63 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 });
+
+// ============================================================
+// הגדרות חלוקה לכל הקבוצה
+// ============================================================
+
+const SPLIT_MODE_HINTS = {
+    percentage:  'כל המשתתפים יעברו לאחוזים, מחולק שווה בשווה בין כולם',
+    shares:      'כל המשתתפים יעברו לנפשות. מי שכבר מוגדר בנפשות ישמור על המספר שלו, והשאר יתחילו מנפש אחת',
+    shares_rate: 'מצב מעורב: אפשר להחזיק חלק מהמשתתפים באחוזים וחלקם בנפשות, ולכן צריך תעריף קבוע לנפש'
+};
+
+function showSplitSettings() {
+    toggleSplitMode();
+    openModal('splitSettingsModal');
+}
+
+function closeSplitSettings() {
+    closeModal('splitSettingsModal');
+}
+
+function toggleSplitMode() {
+    const checked = document.querySelector('input[name="splitMode"]:checked');
+    const mode    = checked ? checked.value : 'percentage';
+
+    document.getElementById('splitModeHint').textContent = SPLIT_MODE_HINTS[mode] || '';
+
+    // שדה התעריף נדרש רק במצב המעורב
+    document.getElementById('shareRateGroup').style.display =
+        mode === 'shares_rate' ? '' : 'none';
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    const form = document.getElementById('splitSettingsForm');
+    if (!form) return;
+
+    form.addEventListener('submit', function (event) {
+        event.preventDefault();
+
+        const mode = document.querySelector('input[name="splitMode"]:checked').value;
+        const rate = parseFloat(document.getElementById('shareRateValue').value);
+
+        if (mode === 'shares_rate' && !(rate > 0)) {
+            alert('יש לקבוע תעריף לנפש');
+            return;
+        }
+
+        const warning = mode === 'percentage'
+            ? 'כל המשתתפים יעברו לאחוזים שווים. ההגדרות הנוכחיות יידרסו.'
+            : (mode === 'shares'
+                ? 'כל המשתתפים יעברו לחלוקה לפי נפשות. ההגדרות הנוכחיות יידרסו.'
+                : 'התעריף לנפש יחול על כל מי שמוגדר בנפשות.');
+
+        if (!confirm(warning)) return;
+
+        callAndReload('setSplitMode', {
+            mode: mode,
+            share_rate: mode === 'shares_rate' ? rate : 0
+        });
+    });
+});

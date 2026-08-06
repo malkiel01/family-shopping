@@ -336,6 +336,27 @@ step(
     }
 );
 
+// ============================================================
+echo "\nמיגרציה 005 - תעריף לנפש\n";
+echo str_repeat('=', 60) . "\n";
+
+step(
+    'purchase_groups.share_rate',
+    function () use ($pdo, $dbName) {
+        return !columnExists($pdo, $dbName, 'purchase_groups', 'share_rate');
+    },
+    function () use ($pdo) {
+        // כשחלק מהמשתתפים באחוזים וחלקם בנפשות, אין דרך לתרגם
+        // "3 נפשות" למספר שאפשר להשוות ל-"20%" - אלא אם נקבע
+        // תעריף קבוע לנפש. NULL פירושו חלוקה יחסית רגילה.
+        $pdo->exec("
+            ALTER TABLE `purchase_groups`
+            ADD COLUMN `share_rate` DECIMAL(10,2) NULL DEFAULT NULL
+                COMMENT 'תעריף לנפש; NULL = חלוקה יחסית'
+        ");
+    }
+);
+
 echo str_repeat('=', 60) . "\n";
 echo "בוצעו: $applied | דילוגים: $skipped | כשלונות: $failed\n";
 

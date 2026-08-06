@@ -84,16 +84,28 @@ foreach ($members as $member) {
     }
 }
 
-// משתתפי נפשות סופגים את כל מה שנשאר, ולכן כשיש כאלה אין
-// "אחוזים חסרים" - החלוקה מלאה מעצם הגדרתה
-$available_percentage = $hasShareMembers ? 0.0 : round(100 - $totalPercentage, 2);
+$groupShareRate = isset($group['share_rate']) && $group['share_rate'] !== null
+    ? (float)$group['share_rate']
+    : null;
 
-// האחוז האפקטיבי של כל משתתף נפשות, לתצוגה בלבד
-$sharePercentages = [];
-foreach (normalizeShareMembers($members) as $normalized) {
-    if (isset($normalized['shares'])) {
-        $sharePercentages[(int)$normalized['id']] = (float)$normalized['participation_value'];
+// בחלוקה יחסית משתתפי הנפשות סופגים את כל מה שנשאר, ולכן אין
+// "אחוזים חסרים". כשנקבע תעריף לנפש הם משלמים סכום ידוע מראש,
+// והאחוזים כן צריכים להשלים ל-100 בעצמם.
+$usesShareRate        = ($groupShareRate !== null && $groupShareRate > 0);
+$available_percentage = ($hasShareMembers && !$usesShareRate)
+    ? 0.0
+    : round(100 - $totalPercentage, 2);
+
+// מה שכל משתתף נפשות משלם בפועל, לתצוגה בלבד
+$shareDisplay = [];
+foreach (normalizeShareMembers($members, $groupShareRate) as $normalized) {
+    if (!isset($normalized['shares'])) {
+        continue;
     }
+
+    $shareDisplay[(int)$normalized['id']] = $usesShareRate
+        ? ['type' => 'amount',  'value' => (float)$normalized['participation_value']]
+        : ['type' => 'percent', 'value' => (float)$normalized['participation_value']];
 }
 
 // --- הזמנות ממתינות (רק למנהל) ---
@@ -175,7 +187,7 @@ if ($featuresReady) {
     $settlements = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
-$balance      = calculateGroupBalance($members, $purchases, $settlements);
+$balance      = calculateGroupBalance($members, $purchases, $settlements, $groupShareRate);
 $summaryText  = buildSummaryText($group, $balance, $shoppingItems);
 
 $openItemCount   = 0;
@@ -186,6 +198,15 @@ foreach ($shoppingItems as $item) {
     } else {
         $openItemCount++;
     }
+}
+
+// השיטה הפעילה כרגע, לפי מצב המשתתפים והתעריף
+if ($usesShareRate) {
+    $currentSplitMode = 'shares_rate';
+} elseif ($hasShareMembers) {
+    $currentSplitMode = 'shares';
+} else {
+    $currentSplitMode = 'percentage';
 }
 
 $canEdit = !$is_closed;
@@ -431,8 +452,9 @@ $canEdit = !$is_closed;
                 <h2><?php echo $is_owner ? 'ניהול משתתפים' : 'משתתפי האירוע'; ?></h2>
                 <?php if ($is_owner && $canEdit): ?>
                 <div class="header-actions">
-                    <button class="btn-secondary" onclick="splitEqually()">
-                        <i class="fas fa-equals"></i> חלוקה שווה
+                    <button class="btn-gear" onclick="showSplitSettings()"
+                            title="הגדרות חלוקה" aria-label="הגדרות חלוקה">
+                        <i class="fas fa-cog"></i>
                     </button>
                     <button class="btn-add" onclick="showAddMemberModal()">
                         <i class="fas fa-user-plus"></i> הוסף משתתף
@@ -460,9 +482,14 @@ $canEdit = !$is_closed;
                                     <i class="fas fa-users"></i>
                                     <?php echo (int)$member['participation_value']; ?> נפשות
                                 </span>
-                                <?php if (isset($sharePercentages[(int)$member['id']])): ?>
+                                <?php if (isset($shareDisplay[(int)$member['id']])): ?>
                                     <span class="share-equiv">
-                                        ≈<?php echo round($sharePercentages[(int)$member['id']], 1); ?>%
+                                        <?php $sd = $shareDisplay[(int)$member['id']]; ?>
+                                        <?php if ($sd['type'] === 'amount'): ?>
+                                            ₪<?php echo number_format($sd['value'], 2); ?>
+                                        <?php else: ?>
+                                            ≈<?php echo round($sd['value'], 1); ?>%
+                                        <?php endif; ?>
                                     </span>
                                 <?php endif; ?>
                             <?php elseif ($member['participation_type'] === 'percentage'): ?>
@@ -638,6 +665,7 @@ $canEdit = !$is_closed;
     if ($is_owner) {
         renderAddMemberModal($available_percentage);
         renderEditMemberModal();
+        renderSplitSettingsModal($currentSplitMode, $groupShareRate ?? 0);
     }
     if ($featuresReady) {
         renderEventModal($group);

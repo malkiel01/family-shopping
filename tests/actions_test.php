@@ -89,6 +89,7 @@ function makeDb() {
     $pdo->exec("CREATE TABLE purchase_groups (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, description TEXT, owner_id INTEGER,
         event_date TEXT, event_location TEXT, status TEXT DEFAULT 'active', closed_at TEXT,
+        share_rate REAL DEFAULT NULL,
         is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT '2026-01-01')");
 
     $pdo->exec("CREATE TABLE group_members (
@@ -518,6 +519,49 @@ $r = run($pdoN, 'editMember', [
 ], 1, true, 1);
 $row = $pdoN->query("SELECT participation_type FROM group_members WHERE id = 3")->fetch();
 check('סוג לא מוכר לא נכנס למסד', $row['participation_type'] === 'percentage', $row['participation_type']);
+
+// ------------------------------------------------------------
+echo "\n13. שיטת חלוקה לכל הקבוצה\n";
+// ------------------------------------------------------------
+$pdoS = makeDb();
+
+$r = run($pdoS, 'setSplitMode', ['mode' => 'shares'], 1, true, 1);
+check('מעבר לנפשות מצליח', $r['success'] === true, $r['message'] ?? '');
+$types = $pdoS->query("SELECT DISTINCT participation_type FROM group_members WHERE is_active = 1")->fetchAll(PDO::FETCH_COLUMN);
+check('כולם עברו לנפשות', $types === ['shares'], implode(',', $types));
+$vals = $pdoS->query("SELECT participation_value FROM group_members WHERE is_active = 1")->fetchAll(PDO::FETCH_COLUMN);
+check('מי שלא היה בנפשות מתחיל מנפש אחת', (float)$vals[0] === 1.0, $vals[0]);
+
+// מספר נפשות קיים נשמר במעבר חוזר
+run($pdoS, 'editMember', ['member_id' => 2, 'participation_type' => 'shares', 'participation_value' => 5], 1, true, 1);
+run($pdoS, 'setSplitMode', ['mode' => 'shares'], 1, true, 1);
+$kept = $pdoS->query("SELECT participation_value FROM group_members WHERE id = 2")->fetchColumn();
+check('מספר נפשות קיים נשמר', (float)$kept === 5.0, $kept);
+
+$r = run($pdoS, 'setSplitMode', ['mode' => 'shares_rate', 'share_rate' => 75], 1, true, 1);
+check('תעריף לנפש נקבע', $r['success'] === true, $r['message'] ?? '');
+$rate = $pdoS->query("SELECT share_rate FROM purchase_groups WHERE id = 1")->fetchColumn();
+check('התעריף נשמר בקבוצה', (float)$rate === 75.0, $rate);
+
+$r = run($pdoS, 'setSplitMode', ['mode' => 'shares_rate', 'share_rate' => 0], 1, true, 1);
+check('תעריף אפס נדחה', $r['success'] === false);
+
+$r = run($pdoS, 'setSplitMode', ['mode' => 'percentage'], 1, true, 1);
+check('חזרה לאחוזים מצליחה', $r['success'] === true, $r['message'] ?? '');
+$sum = $pdoS->query("SELECT SUM(participation_value) FROM group_members WHERE is_active = 1")->fetchColumn();
+check('האחוזים מסתכמים ל-100', abs((float)$sum - 100) < 0.01, $sum);
+$rate = $pdoS->query("SELECT share_rate FROM purchase_groups WHERE id = 1")->fetchColumn();
+check('התעריף התאפס', $rate === null, var_export($rate, true));
+
+$r = run($pdoS, 'setSplitMode', ['mode' => 'zzz'], 1, true, 1);
+check('שיטה לא מוכרת נדחית', $r['success'] === false);
+
+// אין אף משתתף בנפשות, ולכן תעריף לנפש חסר משמעות
+$r = run($pdoS, 'setSplitMode', ['mode' => 'shares_rate', 'share_rate' => 50], 1, true, 1);
+check('תעריף בלי משתתפי נפשות נדחה', $r['success'] === false, $r['message'] ?? '');
+
+$r = run($pdoS, 'setSplitMode', ['mode' => 'shares'], 2, false, 2);
+check('משתתף רגיל לא משנה שיטת חלוקה', $r['success'] === false);
 
 echo "\n" . str_repeat('=', 55) . "\n";
 echo "עבר: $pass | נכשל: $fail\n";

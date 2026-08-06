@@ -1822,3 +1822,76 @@ body {
     direction: ltr;
     unicode-bidi: isolate;
 }
+
+/* ============================================================
+   כפתורי כותרת האירוע - או כולם בשורה, או כולם בשורות נפרדות
+   ------------------------------------------------------------
+   flex-wrap גרם לפריסה של שניים ואחד, שנראית שבורה. עכשיו
+   הם חולקים שורה אחת בחלקים שווים, וכשאין מקום הם עוברים
+   לשורות מלאות - בלי מצב ביניים.
+   ============================================================ */
+
+.event-actions {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 8px;
+    width: 100%;
+}
+
+.event-actions .btn-secondary {
+    flex: 1 1 0;
+    min-width: 0;
+    justify-content: center;
+    white-space: nowrap;
+}
+
+@media (max-width: 460px) {
+    .event-actions {
+        flex-direction: column;
+    }
+
+    .event-actions .btn-secondary {
+        width: 100%;
+    }
+}
+
+/* --- שורת הפעולות של המשתתפים --- */
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.header-actions .btn-add {
+    flex: 1 1 auto;
+}
+
+/* גלגל השיניים פותח את הגדרות החלוקה לכל הקבוצה */
+.btn-gear {
+    flex: 0 0 auto;
+    width: 42px;
+    height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #f1f2f7;
+    color: #555b73;
+    border: none;
+    border-radius: 10px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+
+.btn-gear:hover {
+    background: #e6e8f2;
+    color: #667eea;
+}
+
+@media (max-width: 768px) {
+    /* מבטל את הכלל שמותח את הכפתור על כל הרוחב, כדי שהוא
+       יישאר באותה שורה עם גלגל השיניים */
+    .header-actions .btn-add {
+        width: auto;
+    }
+}

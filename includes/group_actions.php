@@ -54,14 +54,15 @@ function jsonOk(array $extra = []) {
  */
 const OWNER_ONLY_ACTIONS = [
     'addMember', 'removeMember', 'editMember', 'cancelInvitation',
-    'splitEqually', 'updateEvent', 'closeEvent', 'reopenEvent',
+    'splitEqually', 'setSplitMode', 'updateEvent', 'closeEvent', 'reopenEvent',
 ];
 
 /**
  * פעולות שאסורות כשהאירוע סגור.
  */
 const BLOCKED_WHEN_CLOSED = [
-    'addMember', 'removeMember', 'editMember', 'cancelInvitation', 'splitEqually',
+    'addMember', 'removeMember', 'editMember', 'cancelInvitation',
+    'splitEqually', 'setSplitMode',
     'addPurchase', 'updatePurchase', 'deletePurchase',
     'addItem', 'updateItem', 'deleteItem', 'setItemStatus',
 ];
@@ -84,6 +85,7 @@ function handleGroupActions($pdo, $group_id, $user_id, $is_owner, $member_id, $s
         'removeMember'     => 'actionRemoveMember',
         'editMember'       => 'actionEditMember',
         'splitEqually'     => 'actionSplitEqually',
+        'setSplitMode'     => 'actionSetSplitMode',
         'cancelInvitation' => 'actionCancelInvitation',
         'addPurchase'      => 'actionAddPurchase',
         'updatePurchase'   => 'actionUpdatePurchase',
@@ -337,6 +339,113 @@ function availablePercentage($pdo, $groupId, $excludeMemberId = null) {
     $stmt->execute($params);
 
     return 100 - (float)$stmt->fetchColumn();
+}
+
+/**
+ * קובע את שיטת החלוקה של כל הקבוצה בבת אחת.
+ *
+ * percentage  - כולם באחוזים, מחולק שווה בשווה
+ * shares      - כולם בנפשות. מי שכבר הוגדר בנפשות שומר על המספר
+ *               שלו, וכל השאר מתחילים מנפש אחת
+ * shares_rate - מצב מעורב: נקבע תעריף קבוע לנפש, וכך אפשר להחזיק
+ *               חלק מהמשתתפים באחוזים וחלקם בנפשות באותה קבוצה
+ */
+function actionSetSplitMode(GroupContext $context) {
+    $mode = $_POST['mode'] ?? '';
+    $rate = round(floatval($_POST['share_rate'] ?? 0), 2);
+
+    if (!in_array($mode, ['percentage', 'shares', 'shares_rate'], true)) {
+        jsonFail('שיטת חלוקה לא מוכרת');
+        return;
+    }
+
+    if ($mode === 'shares_rate' && $rate <= 0) {
+        jsonFail('יש לקבוע תעריף לנפש');
+        return;
+    }
+
+    $stmt = $context->pdo->prepare("
+        SELECT id, participation_type, participation_value
+        FROM group_members
+        WHERE group_id = ? AND is_active = 1
+        ORDER BY joined_at, id
+    ");
+    $stmt->execute([$context->groupId]);
+    $members = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    if (!$members) {
+        jsonFail('אין משתתפים פעילים בקבוצה');
+        return;
+    }
+
+    if ($mode === 'shares_rate') {
+        $hasShares = false;
+        foreach ($members as $member) {
+            if ($member['participation_type'] === 'shares') {
+                $hasShares = true;
+                break;
+            }
+        }
+
+        if (!$hasShares) {
+            jsonFail('אין אף משתתף שמוגדר לפי נפשות. יש להגדיר לפחות אחד כזה');
+            return;
+        }
+    }
+
+    $context->pdo->beginTransaction();
+    try {
+        $update = $context->pdo->prepare("
+            UPDATE group_members
+            SET participation_type = ?, participation_value = ?
+            WHERE id = ? AND group_id = ?
+        ");
+
+        if ($mode === 'percentage') {
+            // מעגלים כלפי מטה ומוסיפים את שארית העיגול לאחרון,
+            // כדי שהסכום יהיה בדיוק 100
+            $count     = count($members);
+            $share     = floor((100 / $count) * 100) / 100;
+            $remainder = round(100 - ($share * $count), 2);
+
+            foreach ($members as $index => $member) {
+                $value = ($index === $count - 1) ? $share + $remainder : $share;
+                $update->execute(['percentage', $value, $member['id'], $context->groupId]);
+            }
+        } elseif ($mode === 'shares') {
+            foreach ($members as $member) {
+                // מי שכבר בנפשות שומר על המספר שלו
+                $value = $member['participation_type'] === 'shares'
+                    ? max(1, (int)round((float)$member['participation_value']))
+                    : 1;
+                $update->execute(['shares', $value, $member['id'], $context->groupId]);
+            }
+        }
+
+        // התעריף נשמר רק במצב המעורב, ומתאפס בשני האחרים
+        $stmt = $context->pdo->prepare("UPDATE purchase_groups SET share_rate = ? WHERE id = ?");
+        $stmt->execute([$mode === 'shares_rate' ? $rate : null, $context->groupId]);
+
+        $context->pdo->commit();
+    } catch (Exception $e) {
+        $context->pdo->rollBack();
+        throw $e;
+    }
+
+    $symbol      = defined('CURRENCY_SYMBOL') ? CURRENCY_SYMBOL : '₪';
+    $description = [
+        'percentage'  => 'אחוזים, שווה בשווה בין כולם',
+        'shares'      => 'לפי נפשות',
+        'shares_rate' => 'לפי נפשות בתעריף ' . $symbol . number_format($rate, 2) . ' לנפש',
+    ][$mode];
+
+    notifyGroupMembers(
+        $context, 'split_mode',
+        'שיטת החלוקה ב"' . groupDisplayName($context) . '" השתנתה',
+        actorName() . ' עדכן את החלוקה: ' . $description
+    );
+
+    jsonOk(['message' => 'שיטת החלוקה עודכנה: ' . $description]);
 }
 
 function actionRemoveMember(GroupContext $context) {

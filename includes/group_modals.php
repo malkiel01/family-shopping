@@ -346,3 +346,75 @@ function renderImageModal() {
     </div>
     <?php
 }
+
+/**
+ * הגדרות החלוקה של כל הקבוצה.
+ *
+ * שלוש שיטות. השלישית, "נפשות חלקי", קיימת בדיוק בשביל המצב
+ * שבו חלק מהמשתתפים מוגדרים באחוזים וחלקם בנפשות: בלי תעריף
+ * קבוע לנפש אין שום דרך לתרגם "3 נפשות" למספר שאפשר להשוות
+ * ל-"20%".
+ */
+function renderSplitSettingsModal($currentMode, $shareRate) {
+    $rateValue = $shareRate > 0 ? $shareRate : '';
+    ?>
+    <div id="splitSettingsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>הגדרות חלוקה</h2>
+                <span class="close" onclick="closeSplitSettings()">&times;</span>
+            </div>
+            <form id="splitSettingsForm">
+                <div class="form-group">
+                    <label>איך מתחלקים בקבוצה?</label>
+                    <div class="type-picker">
+                        <input type="radio" name="splitMode" id="splitMode_percentage" value="percentage"
+                               <?php echo $currentMode === 'percentage' ? 'checked' : ''; ?>
+                               onchange="toggleSplitMode()">
+                        <label for="splitMode_percentage">
+                            <i class="fas fa-percentage"></i><span>אחוזים</span>
+                        </label>
+
+                        <input type="radio" name="splitMode" id="splitMode_shares" value="shares"
+                               <?php echo $currentMode === 'shares' ? 'checked' : ''; ?>
+                               onchange="toggleSplitMode()">
+                        <label for="splitMode_shares">
+                            <i class="fas fa-users"></i><span>נפשות</span>
+                        </label>
+
+                        <input type="radio" name="splitMode" id="splitMode_rate" value="shares_rate"
+                               <?php echo $currentMode === 'shares_rate' ? 'checked' : ''; ?>
+                               onchange="toggleSplitMode()">
+                        <label for="splitMode_rate">
+                            <i class="fas fa-coins"></i><span>נפשות חלקי</span>
+                        </label>
+                    </div>
+                    <small id="splitModeHint" class="form-hint"></small>
+                </div>
+
+                <div class="form-group" id="shareRateGroup" style="display: none;">
+                    <label for="shareRateValue">תעריף לנפש:</label>
+                    <div class="input-with-suffix">
+                        <input type="number" id="shareRateValue" step="0.01" min="0.01"
+                               value="<?php echo htmlspecialchars((string)$rateValue); ?>">
+                        <span>₪</span>
+                    </div>
+                    <small class="form-hint">
+                        כל משתתף שמוגדר בנפשות ישלם את התעריף כפול מספר הנפשות שלו,
+                        והיתרה תתחלק בין בעלי האחוזים
+                    </small>
+                </div>
+
+                <div class="modal-actions">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i> החל על כולם
+                    </button>
+                    <button type="button" class="btn-secondary" onclick="closeSplitSettings()">
+                        ביטול
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <?php
+}

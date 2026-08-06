@@ -195,5 +195,47 @@ $rFull = calculateGroupBalance(
 check('כשהאחוזים כבר 100, לנפשות לא נשאר כלום', byNick($rFull,'נפשות')['shouldPay'], 0);
 check('ובעל ה-100% משלם הכל', byNick($rFull,'מלא')['shouldPay'], 200);
 
+// ---- 14. נפשות חלקי: תעריף קבוע לנפש
+echo "\n14. נפשות חלקי - תעריף לנפש\n";
+// תעריף 50 לנפש. משפחה של 3 משלמת 150 קבוע, והשאר על בעל האחוזים.
+$mR = [member(1,'משפחה','shares',3), member(2,'אחוזים','percentage',100)];
+$pR = [['id'=>1,'member_id'=>2,'amount'=>500,'excluded_ids'=>[]]];
+$r  = calculateGroupBalance($mR,$pR,[],50);
+check('משפחה של 3 משלמת 150 לפי התעריף', byNick($r,'משפחה')['shouldPay'], 150);
+check('בעל האחוזים משלם את היתרה', byNick($r,'אחוזים')['shouldPay'], 350);
+check('אין סכום לא מוקצה', $r['unallocated'], 0);
+
+echo "\n14ב. אותה קבוצה בלי תעריף מתנהגת אחרת\n";
+// בלי תעריף, האחוזים כבר תופסים 100% ולנפשות לא נשאר כלום
+$r = calculateGroupBalance($mR,$pR);
+check('בלי תעריף הנפשות לא משלמות', byNick($r,'משפחה')['shouldPay'], 0);
+check('ובעל האחוזים משלם הכל', byNick($r,'אחוזים')['shouldPay'], 500);
+
+echo "\n14ג. שתי משפחות בתעריף, ואחד באחוזים\n";
+$mR2 = [
+  member(1,'משפחה א','shares',4),
+  member(2,'משפחה ב','shares',2),
+  member(3,'דוד','percentage',100),
+];
+$pR2 = [['id'=>1,'member_id'=>3,'amount'=>1000,'excluded_ids'=>[]]];
+$r   = calculateGroupBalance($mR2,$pR2,[],80);
+check('משפחה של 4 משלמת 320', byNick($r,'משפחה א')['shouldPay'], 320);
+check('משפחה של 2 משלמת 160', byNick($r,'משפחה ב')['shouldPay'], 160);
+check('דוד משלם את היתרה', byNick($r,'דוד')['shouldPay'], 520);
+$sum = 0; foreach ($r['calculations'] as $c) $sum += $c['shouldPay'];
+check('הכל חולק', $sum, 1000);
+
+echo "\n14ד. תעריף שמכסה יותר מההוצאות\n";
+// שתי משפחות, 6 נפשות בתעריף 100, מול הוצאה של 200 בלבד
+$mR3 = [member(1,'א','shares',4), member(2,'ב','shares',2)];
+$pR3 = [['id'=>1,'member_id'=>1,'amount'=>200,'excluded_ids'=>[]]];
+$r   = calculateGroupBalance($mR3,$pR3,[],100);
+check('חריגה מזוהה', $r['fixedOverflow'], 1);
+check('א משלם נתח יחסי בלבד', byNick($r,'א')['shouldPay'], 400);
+
+echo "\n14ה. תעריף אפס מתנהג כאילו אין תעריף\n";
+$r = calculateGroupBalance($mS,$pS,[],0);
+check('חוזרים לחלוקה יחסית', byNick($r,'משפחה גדולה')['shouldPay'], 400);
+
 echo "\n" . str_repeat('=',50) . "\nעבר: $pass | נכשל: $fail\n";
 exit($fail > 0 ? 1 : 0);
