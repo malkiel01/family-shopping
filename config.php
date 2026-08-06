@@ -57,6 +57,12 @@ define('CURRENCY_SYMBOL', '₪');
 // נתיב הבסיס של האפליקציה באתר (בלי סלאש בסוף)
 define('APP_BASE_PATH', rtrim($_ENV['APP_BASE_PATH'] ?? '/family', '/'));
 
+// מפתחות Web Push. המפתח הציבורי נמסר לדפדפן בזמן ההרשמה למנוי,
+// והפרטי חותם את הבקשות לשירות ה-Push ולעולם לא יוצא מהשרת.
+define('VAPID_PUBLIC_KEY',  $_ENV['VAPID_PUBLIC_KEY'] ?? '');
+define('VAPID_PRIVATE_KEY', $_ENV['VAPID_PRIVATE_KEY'] ?? '');
+define('VAPID_SUBJECT',     $_ENV['VAPID_SUBJECT'] ?? 'mailto:noreply@mbe-plus.com');
+
 /**
  * כתובת של קובץ סטטי, עם חותמת גרסה לפי זמן השינוי של הקובץ.
  *

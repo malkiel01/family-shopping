@@ -637,5 +637,17 @@ $canEdit = !$is_closed;
         };
     </script>
     <script src="<?php echo asset('/js/group.js'); ?>"></script>
+    <script src="<?php echo asset('/js/push-subscribe.js'); ?>"></script>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker
+                    .register('<?php echo APP_BASE_PATH; ?>/service-worker.js',
+                              { scope: '<?php echo APP_BASE_PATH; ?>/' })
+                    .catch(err => console.error('Service Worker registration failed:', err));
+            });
+        }
+    </script>
 </body>
 </html>

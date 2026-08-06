@@ -515,6 +515,7 @@ function eventDateLabel($date) {
     </script>
     <script src="<?php echo asset('/js/notification-system.js'); ?>"></script>
     <script src="<?php echo asset('/js/dashboard.js'); ?>"></script>
+    <script src="<?php echo asset('/js/push-subscribe.js'); ?>"></script>
 
     <script>
         if ('serviceWorker' in navigator) {
