@@ -4,6 +4,15 @@
  * config.php
  */
 
+// הקובץ נטען לפעמים פעמיים באותה בקשה - למשל כשמגיעים אליו
+// דרך נתיב אחר שמצביע על אותו קובץ, ואז require_once לא מזהה
+// את הכפילות. בלי השמירה הזו כל define חוזר כותב אזהרה ללוג,
+// וזה מה שמילא את error_log באלפי שורות.
+if (defined('APP_CONFIG_LOADED')) {
+    return;
+}
+define('APP_CONFIG_LOADED', true);
+
 // פונקציה פשוטה לטעינת קובץ .env
 function loadEnv($path = __DIR__ . '/.env') {
     if (!file_exists($path)) {
