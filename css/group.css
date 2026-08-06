@@ -1731,3 +1731,94 @@ body {
         gap: 6px;
     }
 }
+
+/* ============================================================
+   כרטיס העברה
+   ------------------------------------------------------------
+   המבנה הקודם היה ארבעה פריטי flex בשורה אחת בלי גלישה. ברוחב
+   של טלפון הם נמעכו זה על זה: הסכום גלש על השמות, והכפתור -
+   שאינו יכול להתכווץ מתחת לתוכן שלו - נדחף אל מחוץ לכרטיס.
+   עכשיו הכרטיס הוא עמודה, ולכן אין מה שידחוף החוצה.
+   ============================================================ */
+
+.transfer-card {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 10px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+}
+
+.transfer-parties {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-weight: 600;
+    color: #333;
+    font-size: 15px;
+}
+
+.transfer-person {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.transfer-person i {
+    color: #9aa0b8;
+    font-size: 13px;
+}
+
+.transfer-direction {
+    color: #667eea;
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+.transfer-bottom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-top: 10px;
+    border-top: 1px solid #f0f1f6;
+}
+
+.transfer-amount {
+    font-size: 19px;
+    font-weight: 700;
+    color: #667eea;
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
+.transfer-card .btn-settle {
+    flex-shrink: 0;
+}
+
+/* גם ההיסטוריה נבנתה כשורה אחת שאינה גולשת */
+.settlement-row {
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.settlement-amount,
+.settlement-date {
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
+/* כל סכום כסף מקבל כיוון מפורש. בלי זה סדר הסימן והספרות
+   נקבע על ידי אלגוריתם ה-bidi לפי מה שמקיף אותו, ומשתנה
+   בין הקשר להקשר. */
+.calc-row span:last-child,
+.event-stat .stat-value,
+.purchase-amount,
+.summary-value {
+    direction: ltr;
+    unicode-bidi: isolate;
+}

@@ -466,25 +466,29 @@ function renderCalculationsView(array $members, array $result, $canSettle, array
         <h3>העברות נדרשות:</h3>
         <?php if (count($result['transfers']) > 0): ?>
             <?php foreach ($result['transfers'] as $transfer): ?>
+            <?php // שתי שורות ולא ארבעה פריטים בשורה אחת: בטלפון הם
+                  // נמעכו עד שהסכום דרס את השמות והכפתור יצא מהכרטיס ?>
             <div class="transfer-card">
-                <div class="transfer-from">
-                    <i class="fas fa-user"></i>
-                    <?php echo htmlspecialchars($transfer['from']); ?>
+                <div class="transfer-parties">
+                    <span class="transfer-person">
+                        <i class="fas fa-user"></i>
+                        <?php echo htmlspecialchars($transfer['from']); ?>
+                    </span>
+                    <i class="fas fa-arrow-left transfer-direction" aria-label="משלם ל"></i>
+                    <span class="transfer-person">
+                        <i class="fas fa-user"></i>
+                        <?php echo htmlspecialchars($transfer['to']); ?>
+                    </span>
                 </div>
-                <div class="transfer-arrow">
-                    <i class="fas fa-arrow-left"></i>
-                    <span>₪<?php echo number_format($transfer['amount'], 2); ?></span>
+                <div class="transfer-bottom">
+                    <span class="transfer-amount">₪<?php echo number_format($transfer['amount'], 2); ?></span>
+                    <?php if ($canSettle): ?>
+                    <button class="btn-settle"
+                            onclick="markSettled(<?php echo $transfer['from_id']; ?>, <?php echo $transfer['to_id']; ?>, <?php echo $transfer['amount']; ?>)">
+                        <i class="fas fa-check"></i> שולם
+                    </button>
+                    <?php endif; ?>
                 </div>
-                <div class="transfer-to">
-                    <i class="fas fa-user"></i>
-                    <?php echo htmlspecialchars($transfer['to']); ?>
-                </div>
-                <?php if ($canSettle): ?>
-                <button class="btn-settle"
-                        onclick="markSettled(<?php echo $transfer['from_id']; ?>, <?php echo $transfer['to_id']; ?>, <?php echo $transfer['amount']; ?>)">
-                    <i class="fas fa-check"></i> שולם
-                </button>
-                <?php endif; ?>
             </div>
             <?php endforeach; ?>
         <?php else: ?>
