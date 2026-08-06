@@ -180,9 +180,9 @@ if (!$error && !$emailMismatch && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 <h1>ההזמנה שייכת לחשבון אחר</h1>
                 <p class="join-message">
                     ההזמנה נשלחה לכתובת
-                    <strong><?php echo htmlspecialchars($invitation['email']); ?></strong>,
+                    <strong class="email-ltr"><?php echo htmlspecialchars($invitation['email']); ?></strong>,
                     אבל התחברת עם
-                    <strong><?php echo htmlspecialchars($_SESSION['email'] ?? ''); ?></strong>.
+                    <strong class="email-ltr"><?php echo htmlspecialchars($_SESSION['email'] ?? ''); ?></strong>.
                 </p>
                 <p class="join-message">
                     התחברו עם הכתובת שאליה נשלחה ההזמנה, או בקשו ממנהל האירוע

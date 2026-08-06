@@ -142,3 +142,9 @@ body {
 
 .btn-secondary { background: #f0f0f5; color: #555; }
 .btn-secondary:hover { background: #e2e2ea; }
+
+/* אימייל שמתחיל בספרות מתהפך בהקשר RTL. הבידוד שומר על הסדר. */
+.email-ltr {
+    unicode-bidi: isolate;
+    direction: ltr;
+}
