@@ -380,5 +380,224 @@ class EmailService {
             error_log("Failed to log email: " . $e->getMessage());
         }
     }
+    
+    /**
+     * שליחת הזמנה לקבוצה עם לינק לאישור אוטומטי
+     * 
+     * @param int $invitationId מזהה ההזמנה
+     * @return bool האם השליחה הצליחה
+     */
+    public function sendGroupInvitationAutoApprove($invitationId) {
+        try {
+            // קבל פרטי ההזמנה מהמסד נתונים
+            $stmt = $this->pdo->prepare("
+                SELECT 
+                    gi.*,
+                    pg.name as group_name,
+                    pg.description,
+                    inviter.name as inviter_name
+                FROM group_invitations gi
+                JOIN purchase_groups pg ON gi.group_id = pg.id
+                JOIN users inviter ON gi.invited_by = inviter.id
+                WHERE gi.id = ?
+            ");
+            $stmt->execute([$invitationId]);
+            $invitation = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            // וודא שההזמנה קיימת
+            if (!$invitation) {
+                throw new Exception("Invitation not found: $invitationId");
+            }
+            
+            // בנה את ה-URL המלא לאישור אוטומטי
+            $approveUrl = "{$this->baseUrl}/approve-invitation.php?token=" . $invitation['token'];
+            
+            // כותרת המייל
+            $subject = "הזמנה לקבוצת רכישה - {$invitation['group_name']}";
+            
+            // בניית תוכן ה-HTML של המייל
+            $htmlBody = '<!DOCTYPE html>
+    <html dir="rtl" lang="he">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            body { 
+                font-family: Arial, sans-serif; 
+                background: #f5f5f5; 
+                padding: 20px; 
+                direction: rtl; 
+                margin: 0;
+            }
+            .container { 
+                max-width: 600px; 
+                margin: 0 auto; 
+                background: white; 
+                border-radius: 15px; 
+                overflow: hidden; 
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
+            }
+            .header { 
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                color: white; 
+                padding: 30px; 
+                text-align: center; 
+            }
+            .header h1 { 
+                margin: 0; 
+                font-size: 24px; 
+            }
+            .content { 
+                padding: 30px; 
+            }
+            .info-box { 
+                background: #f8f9fa; 
+                border-radius: 8px; 
+                padding: 20px; 
+                margin: 20px 0; 
+            }
+            .info-item { 
+                margin-bottom: 15px;
+                line-height: 1.6;
+            }
+            .info-item:last-child {
+                margin-bottom: 0;
+            }
+            .info-item strong { 
+                color: #667eea; 
+                display: inline-block;
+                margin-left: 5px;
+            }
+            .button { 
+                display: inline-block; 
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                color: white !important; 
+                padding: 15px 40px; 
+                border-radius: 25px; 
+                text-decoration: none; 
+                margin: 20px 0; 
+                font-weight: bold;
+                font-size: 16px;
+            }
+            .button:hover {
+                opacity: 0.9;
+            }
+            .footer { 
+                background: #f8f9fa; 
+                padding: 20px; 
+                text-align: center; 
+                color: #666; 
+                font-size: 14px; 
+            }
+            .note {
+                font-size: 14px;
+                color: #666;
+                margin-top: 20px;
+                line-height: 1.6;
+            }
+            .link-text {
+                font-size: 12px;
+                color: #999;
+                margin-top: 20px;
+                word-break: break-all;
+            }
+            .link-text a {
+                color: #667eea;
+                text-decoration: none;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>🎉 הוזמנת להצטרף לקבוצת רכישה!</h1>
+            </div>
+            <div class="content">
+                <p style="font-size: 16px; line-height: 1.6;">שלום,</p>
+                <p style="font-size: 16px; line-height: 1.6;">
+                    <strong>' . htmlspecialchars($invitation['inviter_name']) . '</strong> הזמין אותך להצטרף לקבוצת הרכישה 
+                    <strong>"' . htmlspecialchars($invitation['group_name']) . '"</strong>
+                </p>
+                
+                <div class="info-box">';
+            
+            // הוסף תיאור אם קיים
+            if (!empty($invitation['description'])) {
+                $htmlBody .= '
+                    <div class="info-item">
+                        <strong>📋 תיאור הקבוצה:</strong><br>
+                        ' . nl2br(htmlspecialchars($invitation['description'])) . '
+                    </div>';
+            }
+            
+            // פרטי ההשתתפות
+            $htmlBody .= '
+                    <div class="info-item">
+                        <strong>👤 השם שלך בקבוצה:</strong>
+                        ' . htmlspecialchars($invitation['nickname']) . '
+                    </div>
+                    <div class="info-item">
+                        <strong>💰 החלק שלך:</strong> ';
+            
+            // חישוב סוג ההשתתפות
+            if ($invitation['participation_type'] === 'percentage') {
+                $htmlBody .= number_format($invitation['participation_value'], 2) . '%';
+            } else {
+                $htmlBody .= '₪' . number_format($invitation['participation_value'], 2);
+            }
+            
+            $htmlBody .= '
+                    </div>
+                </div>
+                
+                <center>
+                    <a href="' . htmlspecialchars($approveUrl) . '" class="button">
+                        ✅ הצטרף לקבוצה עכשיו
+                    </a>
+                </center>
+                
+                <div class="note">
+                    <p>💡 לחיצה על הכפתור תאשר אוטומטית את הצטרפותך לקבוצה.</p>
+                    <p>לא צריך לעשות שום דבר נוסף!</p>
+                </div>
+                
+                <div class="link-text">
+                    <p>אם הכפתור לא עובד, העתק את הקישור הבא לדפדפן:</p>
+                    <a href="' . htmlspecialchars($approveUrl) . '">' . htmlspecialchars($approveUrl) . '</a>
+                </div>
+            </div>
+            <div class="footer">
+                <p><strong>הודעה זו נשלחה ממערכת ניהול קניות מרוכזות</strong></p>
+                <p>אם לא ביקשת הזמנה זו, אנא התעלם מהודעה זו</p>
+                <p style="margin-top: 10px; color: #999; font-size: 12px;">
+                    נשלח בתאריך: ' . date('d/m/Y H:i') . '
+                </p>
+            </div>
+        </div>
+    </body>
+    </html>';
+            
+            // שלח את המייל
+            $result = $this->sendEmail(
+                $invitation['email'],
+                $subject,
+                $htmlBody
+            );
+            
+            // רשום בלוג
+            if ($result) {
+                error_log("Auto-approve invitation email sent successfully to: {$invitation['email']} for invitation ID: {$invitationId}");
+            } else {
+                error_log("Failed to send auto-approve invitation email to: {$invitation['email']} for invitation ID: {$invitationId}");
+            }
+            
+            return $result;
+            
+        } catch (Exception $e) {
+            error_log("SendGroupInvitationAutoApprove error: " . $e->getMessage());
+            return false;
+        }
+    }
+    
 }
 ?>

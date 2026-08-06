@@ -258,6 +258,33 @@ step(
     }
 );
 
+// ============================================================
+echo "\nמיגרציה 003 - יומן המיילים\n";
+echo str_repeat('=', 60) . "\n";
+
+step(
+    'טבלה email_log',
+    function () use ($pdo, $dbName) {
+        return !tableExists($pdo, $dbName, 'email_log');
+    },
+    function () use ($pdo) {
+        // EmailService כותב לטבלה הזו בכל שליחה. היא לא הייתה
+        // קיימת, ולכן כל רישום נכשל בשקט ולא היה שום תיעוד
+        // של מיילים שיצאו או נכשלו.
+        $pdo->exec("
+            CREATE TABLE `email_log` (
+                `id`        INT AUTO_INCREMENT PRIMARY KEY,
+                `to_email`  VARCHAR(255) NOT NULL,
+                `subject`   VARCHAR(255) NOT NULL,
+                `status`    ENUM('sent','failed') NOT NULL DEFAULT 'sent',
+                `sent_at`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                INDEX `idx_email_log_sent` (`sent_at`),
+                INDEX `idx_email_log_to`   (`to_email`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+    }
+);
+
 echo str_repeat('=', 60) . "\n";
 echo "בוצעו: $applied | דילוגים: $skipped | כשלונות: $failed\n";
 

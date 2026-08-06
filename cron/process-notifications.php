@@ -18,6 +18,7 @@
 
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../includes/WebPush.php';
+require_once __DIR__ . '/../includes/EmailService.php';
 
 $isCli = (php_sapi_name() === 'cli');
 
@@ -59,7 +60,44 @@ if (VAPID_PUBLIC_KEY === '' || VAPID_PRIVATE_KEY === '') {
 
 $push = new WebPush(VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT);
 
-$sent = $skipped = $failed = $expiredSubs = 0;
+$sent = $skipped = $failed = $expiredSubs = $emailed = 0;
+
+/**
+ * שולח הזמנה במייל למי שאין לו מנוי Push.
+ *
+ * רק הזמנות. על עדכון קנייה אפשר לחיות בלי מייל, אבל מי שהוזמן
+ * לאירוע ולא נכנס לאפליקציה פשוט לא ידע על כך.
+ *
+ * @return bool האם נשלח מייל
+ */
+function emailFallback(PDO $pdo, array $row) {
+    if ($row['type'] !== 'invitation') {
+        return false;
+    }
+
+    // רק הזמנות טריות. התראה שממתינה כבר שעה הגיעה לכאן בגלל
+    // תקלה או backlog, ואין סיבה להפציץ אנשים במיילים על הזמנות
+    // שכבר טופלו בדרך אחרת.
+    if (strtotime($row['created_at']) < time() - 3600) {
+        return false;
+    }
+
+    $data = json_decode($row['data'], true);
+
+    if (empty($data['invitation_id'])) {
+        return false;
+    }
+
+    try {
+        $mailer = new EmailService($pdo);
+
+        return (bool)$mailer->sendGroupInvitation((int)$data['invitation_id']);
+    } catch (Exception $e) {
+        error_log('Invitation email failed: ' . $e->getMessage());
+
+        return false;
+    }
+}
 
 // ------------------------------------------------------------
 // התראות שפג תוקפן - מסומנות ככשלון כדי שלא יישארו בתור לנצח
@@ -77,7 +115,7 @@ $aged = $stmt->rowCount();
 // ההתראות שממתינות למשלוח
 // ------------------------------------------------------------
 $stmt = $pdo->prepare("
-    SELECT id, user_id, type, data, attempts
+    SELECT id, user_id, type, data, attempts, created_at
     FROM notification_queue
     WHERE status = 'pending'
       AND processed_at IS NULL
@@ -121,8 +159,14 @@ foreach ($pending as $row) {
     $subscriptions = $subsStmt->fetchAll(PDO::FETCH_ASSOC);
 
     if (!$subscriptions) {
-        // אין לאן לדחוף. ההתראה נשארת ממתינה עבור הערוץ שבתוך
+        // אין לאן לדחוף. הזמנה היא הדבר היחיד שאסור לפספס - מי
+        // שלא נכנס לאפליקציה לא ידע בכלל שהוזמן - ולכן היא נשלחת
+        // במייל. ההתראה נשארת ממתינה גם עבור הערוץ שבתוך
         // האפליקציה, ולא תיבחר שוב כאן.
+        if (emailFallback($pdo, $row)) {
+            $emailed++;
+        }
+
         $markNoSubscription->execute([$row['id']]);
         $skipped++;
         continue;
@@ -175,8 +219,8 @@ foreach ($pending as $row) {
 }
 
 echo sprintf(
-    "נשלחו: %d | ללא מנוי: %d | נכשלו: %d | מנויים שפגו: %d | ישנות שנסגרו: %d\n",
-    $sent, $skipped, $failed, $expiredSubs, $aged
+    "נשלחו: %d | במייל: %d | ללא מנוי: %d | נכשלו: %d | מנויים שפגו: %d | ישנות שנסגרו: %d\n",
+    $sent, $emailed, $skipped, $failed, $expiredSubs, $aged
 );
 
 flock($lock, LOCK_UN);
