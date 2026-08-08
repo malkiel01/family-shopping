@@ -247,3 +247,47 @@
 .admin-group-head .btn-force {
     margin-right: auto;
 }
+
+/* --- אזור הפעולות ההרסניות ---
+   מופרד בקו, כדי שלא ייראה כמו עוד שורה ברשימה */
+.admin-danger-zone {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid #e6e8f2;
+}
+
+.btn-restore-admin,
+.btn-purge-admin {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 11px;
+    border: none;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.btn-restore-admin {
+    background: #e6f0fe;
+    color: #2b6cb0;
+}
+
+.btn-purge-admin {
+    background: #fdecec;
+    color: #c53030;
+}
+
+.btn-purge-admin.soft {
+    background: #f4f5f9;
+    color: #6b7089;
+}
+
+.btn-restore-admin:hover { background: #d6e6fd; }
+.btn-purge-admin:hover   { background: #f9d6d6; }
+.btn-purge-admin.soft:hover { background: #e9ebf2; }

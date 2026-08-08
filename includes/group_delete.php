@@ -21,13 +21,23 @@ require_once __DIR__ . '/upload.php';
 require_once __DIR__ . '/notifications.php';
 
 /**
- * מאמת שהמשתמש הוא בעל האירוע.
+ * מאתר את האירוע ומאמת הרשאה למחוק אותו.
  *
- * @return array|null שורת האירוע, או null אם אינו הבעלים
+ * בעל האירוע רשאי למחוק את שלו בלבד. מנהל המערכת רשאי למחוק
+ * כל אירוע, ולכן הבדיקה מדלגת על התאמת הבעלות - אבל רק כשהיא
+ * נקראת ממסלול שכבר אימת את הרשאת הניהול.
+ *
+ * @return array|null שורת האירוע, או null אם אין הרשאה
  */
-function groupOwnedBy(PDO $pdo, $groupId, $userId) {
-    $stmt = $pdo->prepare("SELECT * FROM purchase_groups WHERE id = ? AND owner_id = ?");
-    $stmt->execute([(int)$groupId, (int)$userId]);
+function groupOwnedBy(PDO $pdo, $groupId, $userId, $isAdmin = false) {
+    if ($isAdmin) {
+        $stmt = $pdo->prepare("SELECT * FROM purchase_groups WHERE id = ?");
+        $stmt->execute([(int)$groupId]);
+    } else {
+        $stmt = $pdo->prepare("SELECT * FROM purchase_groups WHERE id = ? AND owner_id = ?");
+        $stmt->execute([(int)$groupId, (int)$userId]);
+    }
+
     $group = $stmt->fetch(PDO::FETCH_ASSOC);
 
     return $group ?: null;
@@ -38,8 +48,8 @@ function groupOwnedBy(PDO $pdo, $groupId, $userId) {
  *
  * @return array{ok: bool, message: string}
  */
-function softDeleteGroup(PDO $pdo, $groupId, $ownerId) {
-    $group = groupOwnedBy($pdo, $groupId, $ownerId);
+function softDeleteGroup(PDO $pdo, $groupId, $ownerId, $isAdmin = false) {
+    $group = groupOwnedBy($pdo, $groupId, $ownerId, $isAdmin);
 
     if (!$group) {
         return ['ok' => false, 'message' => 'האירוע לא נמצא, או שאינך מנהל שלו'];
@@ -54,7 +64,7 @@ function softDeleteGroup(PDO $pdo, $groupId, $ownerId) {
     notifyGroupMembersById(
         $pdo, $groupId, $ownerId, 'group_deleted',
         'האירוע "' . $group['name'] . '" נמחק',
-        ($_SESSION['name'] ?? 'מנהל האירוע') . ' מחק את האירוע'
+        ($isAdmin ? 'מנהל המערכת' : ($_SESSION['name'] ?? 'מנהל האירוע')) . ' מחק את האירוע'
     );
 
     $stmt = $pdo->prepare("UPDATE purchase_groups SET is_active = 0 WHERE id = ?");
@@ -66,8 +76,8 @@ function softDeleteGroup(PDO $pdo, $groupId, $ownerId) {
 /**
  * שחזור אירוע שנמחק מחיקה רגילה.
  */
-function restoreGroup(PDO $pdo, $groupId, $ownerId) {
-    $group = groupOwnedBy($pdo, $groupId, $ownerId);
+function restoreGroup(PDO $pdo, $groupId, $ownerId, $isAdmin = false) {
+    $group = groupOwnedBy($pdo, $groupId, $ownerId, $isAdmin);
 
     if (!$group) {
         return ['ok' => false, 'message' => 'האירוע לא נמצא, או שאינך מנהל שלו'];
@@ -100,8 +110,8 @@ function restoreGroup(PDO $pdo, $groupId, $ownerId) {
  *
  * @return array{ok: bool, message: string}
  */
-function purgeGroup(PDO $pdo, $groupId, $ownerId, $confirmName) {
-    $group = groupOwnedBy($pdo, $groupId, $ownerId);
+function purgeGroup(PDO $pdo, $groupId, $ownerId, $confirmName, $isAdmin = false) {
+    $group = groupOwnedBy($pdo, $groupId, $ownerId, $isAdmin);
 
     if (!$group) {
         return ['ok' => false, 'message' => 'האירוע לא נמצא, או שאינך מנהל שלו'];
@@ -121,7 +131,7 @@ function purgeGroup(PDO $pdo, $groupId, $ownerId, $confirmName) {
     notifyGroupMembersById(
         $pdo, $groupId, $ownerId, 'group_purged',
         'האירוע "' . $group['name'] . '" נמחק לצמיתות',
-        ($_SESSION['name'] ?? 'מנהל האירוע') . ' מחק את האירוע וכל הנתונים שבו'
+        ($isAdmin ? 'מנהל המערכת' : ($_SESSION['name'] ?? 'מנהל האירוע')) . ' מחק את האירוע וכל הנתונים שבו'
     );
 
     // תמונות הקבלות נמחקות מהדיסק לפני שהשורות נעלמות,
@@ -166,8 +176,8 @@ function purgeGroup(PDO $pdo, $groupId, $ownerId, $confirmName) {
         $stmt->execute([$groupId]);
 
         // 7. והאירוע עצמו
-        $stmt = $pdo->prepare("DELETE FROM purchase_groups WHERE id = ? AND owner_id = ?");
-        $stmt->execute([$groupId, (int)$ownerId]);
+        $stmt = $pdo->prepare("DELETE FROM purchase_groups WHERE id = ?");
+        $stmt->execute([$groupId]);
 
         $pdo->commit();
     } catch (Exception $e) {

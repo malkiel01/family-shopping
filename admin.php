@@ -47,6 +47,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             ), JSON_UNESCAPED_UNICODE);
             exit;
 
+        case 'deleteGroup':
+            $result = adminDeleteGroup(
+                $pdo, $user_id,
+                intval($_POST['group_id'] ?? 0),
+                $_POST['mode'] ?? '',
+                $_POST['confirm_name'] ?? ''
+            );
+            echo json_encode([
+                'success' => $result['ok'],
+                'message' => $result['message'],
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+
         case 'addToGroup':
             $result = adminAddUserToGroup(
                 $pdo, $user_id,

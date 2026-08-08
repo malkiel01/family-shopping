@@ -16,6 +16,7 @@
 
 require_once __DIR__ . '/notifications.php';
 require_once __DIR__ . '/participation.php';
+require_once __DIR__ . '/group_delete.php';
 
 /** האם עמודת ההרשאה קיימת. נבדק פעם אחת לכל בקשה. */
 function adminSchemaReady(PDO $pdo) {
@@ -455,6 +456,49 @@ function adminAddUserToGroup(PDO $pdo, $adminId, $groupId, $targetUserId, $type,
         'ok'      => true,
         'message' => sprintf('%s צורף לאירוע "%s"', $user['name'], $group['name']),
     ];
+}
+
+/**
+ * מחיקת אירוע על ידי מנהל המערכת.
+ *
+ * עוטף את אותן פונקציות שמשמשות את בעל האירוע, עם דגל הרשאה
+ * שמדלג על בדיקת הבעלות - ומוסיף רישום ביומן, כי זו פעולה
+ * על נכס של מישהו אחר.
+ *
+ * @param string $mode soft | restore | purge
+ *
+ * @return array{ok: bool, message: string}
+ */
+function adminDeleteGroup(PDO $pdo, $adminId, $groupId, $mode, $confirmName = '') {
+    $stmt = $pdo->prepare("SELECT name, owner_id FROM purchase_groups WHERE id = ?");
+    $stmt->execute([(int)$groupId]);
+    $group = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$group) {
+        return ['ok' => false, 'message' => 'האירוע לא נמצא'];
+    }
+
+    if ($mode === 'soft') {
+        $result = softDeleteGroup($pdo, $groupId, $adminId, true);
+        $action = 'soft_delete_group';
+    } elseif ($mode === 'restore') {
+        $result = restoreGroup($pdo, $groupId, $adminId, true);
+        $action = 'restore_group';
+    } elseif ($mode === 'purge') {
+        $result = purgeGroup($pdo, $groupId, $adminId, $confirmName, true);
+        $action = 'purge_group';
+    } else {
+        return ['ok' => false, 'message' => 'פעולה לא מוכרת'];
+    }
+
+    if ($result['ok']) {
+        logAdminAction(
+            $pdo, $adminId, $action, 'group', (int)$groupId,
+            sprintf('אירוע "%s" של משתמש %d', $group['name'], (int)$group['owner_id'])
+        );
+    }
+
+    return $result;
 }
 
 /** סטטיסטיקה כללית לראש הדף */

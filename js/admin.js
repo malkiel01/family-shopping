@@ -234,6 +234,22 @@ function renderGroupDetail(groupId, data) {
     const name = document.querySelector('#group-' + groupId)
         .closest('.admin-user').querySelector('h3').textContent.trim();
 
+    const card     = document.querySelector('#group-' + groupId).closest('.admin-user');
+    const isDeleted = card.querySelector('h3').textContent.includes('מושבת');
+
+    // פעולות ההרס מופרדות משאר הפעולות, כדי שלא ייראו כמו
+    // עוד כפתור באותה שורה
+    const danger = isDeleted
+        ? `<button class="btn-restore-admin" onclick="adminGroupAction(${Number(groupId)}, 'restore', ${JSON.stringify(name)})">
+               <i class="fas fa-rotate-left"></i> שחזר
+           </button>
+           <button class="btn-purge-admin" onclick="adminGroupAction(${Number(groupId)}, 'purge', ${JSON.stringify(name)})">
+               <i class="fas fa-trash"></i> מחק לצמיתות
+           </button>`
+        : `<button class="btn-purge-admin soft" onclick="adminGroupAction(${Number(groupId)}, 'soft', ${JSON.stringify(name)})">
+               <i class="fas fa-trash-can"></i> מחק אירוע
+           </button>`;
+
     return `
         <div class="admin-group">
             <div class="admin-group-head">
@@ -244,6 +260,7 @@ function renderGroupDetail(groupId, data) {
             </div>
             <ul class="admin-members">${members || '<li>אין משתתפים</li>'}</ul>
             ${pending ? `<div class="admin-pending-title">הזמנות ממתינות</div><ul class="admin-members">${pending}</ul>` : ''}
+            <div class="admin-danger-zone">${danger}</div>
         </div>
     `;
 }
@@ -353,3 +370,45 @@ window.onclick = function (event) {
     const modal = document.getElementById('addToGroupModal');
     if (event.target === modal) closeAddToGroup();
 };
+
+/**
+ * מחיקה, שחזור ומחיקה סופית של אירוע על ידי מנהל המערכת.
+ * המחיקה הסופית דורשת הקלדת שם, בדיוק כמו אצל בעל האירוע.
+ */
+async function adminGroupAction(groupId, mode, groupName) {
+    let confirmName = '';
+
+    if (mode === 'soft') {
+        if (!confirm('למחוק את האירוע "' + groupName + '"?\n\n'
+            + 'הוא ייעלם מכל המשתתפים, אבל הנתונים יישמרו וניתן יהיה לשחזר.')) {
+            return;
+        }
+    } else if (mode === 'purge') {
+        const typed = prompt(
+            'מחיקה לצמיתות של "' + groupName + '".\n\n'
+            + 'כל המשתתפים יוסרו, וכל הקניות, ההחרגות, הרשימה, ההתחשבנויות\n'
+            + 'ותמונות הקבלות יימחקו. אין דרך לשחזר.\n\n'
+            + 'זהו אירוע של משתמש אחר. להמשך, הקלד את שם האירוע במדויק:'
+        );
+
+        if (typed === null) return;
+
+        if (typed.trim() !== groupName.trim()) {
+            alert('השם שהוקלד אינו תואם. המחיקה בוטלה.');
+            return;
+        }
+
+        confirmName = typed;
+    }
+
+    const data = await callAction('deleteGroup', {
+        group_id:     groupId,
+        mode:         mode,
+        confirm_name: confirmName
+    });
+
+    if (!data) return;
+
+    alert(data.message);
+    location.reload();
+}

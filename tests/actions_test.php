@@ -685,6 +685,36 @@ foreach ([
     check("$label נמחקו", $left === 0, "נותרו: $left");
 }
 
+// ------------------------------------------------------------
+echo "\n17. מחיקה בהרשאת ניהול\n";
+// ------------------------------------------------------------
+// משתמש 9 אינו בעל האירוע, אך פועל בהרשאת ניהול
+$pdoA = makeDb();
+run($pdoA, 'addPurchase', ['member_id' => 1, 'amount' => 200], 1, true, 1);
+
+$r = softDeleteGroup($pdoA, 1, 9, false);
+check('בלי הרשאת ניהול - נדחה', $r['ok'] === false);
+
+$r = softDeleteGroup($pdoA, 1, 9, true);
+check('עם הרשאת ניהול - מוחק אירוע של אחר', $r['ok'] === true, $r['message']);
+$active = (int)$pdoA->query("SELECT is_active FROM purchase_groups WHERE id = 1")->fetchColumn();
+check('האירוע סומן כלא פעיל', $active === 0);
+
+$r = restoreGroup($pdoA, 1, 9, true);
+check('מנהל המערכת משחזר', $r['ok'] === true, $r['message']);
+
+$r = purgeGroup($pdoA, 1, 9, 'שם שגוי', true);
+check('גם למנהל המערכת השם חייב להתאים', $r['ok'] === false);
+$still = (int)$pdoA->query("SELECT COUNT(*) FROM purchase_groups WHERE id = 1")->fetchColumn();
+check('האירוע שרד את הניסיון', $still === 1);
+
+$r = purgeGroup($pdoA, 1, 9, 'פסח', true);
+check('מחיקה סופית בהרשאת ניהול', $r['ok'] === true, $r['message']);
+$gone = (int)$pdoA->query("SELECT COUNT(*) FROM purchase_groups WHERE id = 1")->fetchColumn();
+check('האירוע נמחק אף שהמוחק אינו הבעלים', $gone === 0);
+$members = (int)$pdoA->query("SELECT COUNT(*) FROM group_members WHERE group_id = 1")->fetchColumn();
+check('וגם המשתתפים ירדו', $members === 0);
+
 echo "\n" . str_repeat('=', 55) . "\n";
 echo "עבר: $pass | נכשל: $fail\n";
 exit($fail > 0 ? 1 : 0);
