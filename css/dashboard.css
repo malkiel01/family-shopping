@@ -944,3 +944,14 @@ body {
 
 
 .btn-gear { text-decoration: none; }
+
+/* קיצור לפלטפורמת הניהול, מוצג רק למנהל */
+.btn-gear.admin {
+    background: #efe9fb;
+    color: #6b3fc9;
+}
+
+.btn-gear.admin:hover {
+    background: #e3d9f8;
+    color: #5a2fb8;
+}

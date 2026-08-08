@@ -413,6 +413,69 @@ step(
     }
 );
 
+// ============================================================
+echo "\nמיגרציה 007 - פלטפורמת ניהול\n";
+echo str_repeat('=', 60) . "\n";
+
+step(
+    'users.is_admin',
+    function () use ($pdo, $dbName) {
+        return !columnExists($pdo, $dbName, 'users', 'is_admin');
+    },
+    function () use ($pdo) {
+        $pdo->exec("
+            ALTER TABLE `users`
+            ADD COLUMN `is_admin` TINYINT(1) NOT NULL DEFAULT 0
+                COMMENT 'הרשאת ניהול לכלל המערכת'
+        ");
+    }
+);
+
+step(
+    'טבלה admin_actions',
+    function () use ($pdo, $dbName) {
+        return !tableExists($pdo, $dbName, 'admin_actions');
+    },
+    function () use ($pdo) {
+        // פעולה שמנהל מבצע בשם משתמש אחר חייבת להשאיר עקבות.
+        // בלי יומן, אי אפשר לענות על השאלה "מי אישר את זה ומתי".
+        $pdo->exec("
+            CREATE TABLE `admin_actions` (
+                `id`          INT AUTO_INCREMENT PRIMARY KEY,
+                `admin_id`    INT          NOT NULL,
+                `action`      VARCHAR(50)  NOT NULL,
+                `target_type` VARCHAR(50)  NULL,
+                `target_id`   INT          NULL,
+                `details`     TEXT         NULL,
+                `created_at`  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                INDEX `idx_admin_actions_admin` (`admin_id`, `created_at`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+    }
+);
+
+step(
+    'הענקת הרשאת ניהול לפי ADMIN_EMAIL',
+    function () use ($pdo, $dbName) {
+        if (!columnExists($pdo, $dbName, 'users', 'is_admin')) {
+            return false;
+        }
+
+        // רק אם אין עדיין אף מנהל, וההגדרה קיימת
+        $email = trim($_ENV['ADMIN_EMAIL'] ?? '');
+
+        return $email !== ''
+            && (int)$pdo->query("SELECT COUNT(*) FROM users WHERE is_admin = 1")->fetchColumn() === 0;
+    },
+    function () use ($pdo) {
+        $email = trim($_ENV['ADMIN_EMAIL'] ?? '');
+        $stmt  = $pdo->prepare("UPDATE users SET is_admin = 1 WHERE email = ?");
+        $stmt->execute([$email]);
+
+        echo "           (הוענקה ל-" . $stmt->rowCount() . " משתמש)\n";
+    }
+);
+
 echo str_repeat('=', 60) . "\n";
 echo "בוצעו: $applied | דילוגים: $skipped | כשלונות: $failed\n";
 

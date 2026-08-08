@@ -9,6 +9,7 @@ require_once 'includes/auth_check.php';
 require_once 'includes/schema.php';
 require_once 'includes/notifications.php';
 require_once 'includes/participation.php';
+require_once 'includes/admin.php';
 
 $pdo     = getDBConnection();
 $user_id = $_SESSION['user_id'];
@@ -354,6 +355,11 @@ function eventDateLabel($date) {
                 האירועים שלי
             </a>
             <div class="navbar-user">
+                <?php if (isSystemAdmin($pdo, $user_id)): ?>
+                <a href="admin.php" class="btn-gear admin" title="ניהול המערכת" aria-label="ניהול המערכת">
+                    <i class="fas fa-shield-halved"></i>
+                </a>
+                <?php endif; ?>
                 <a href="contacts.php" class="btn-gear" title="אנשי קשר" aria-label="אנשי קשר">
                     <i class="fas fa-address-book"></i>
                 </a>

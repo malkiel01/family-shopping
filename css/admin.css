@@ -1,0 +1,195 @@
+/* css/admin.css
+   פלטפורמת הניהול. נשענת על dashboard.css ו-contacts.css. */
+
+.admin-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.admin-stat {
+    background: white;
+    border-radius: 12px;
+    padding: 12px 8px;
+    text-align: center;
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.08);
+}
+
+.admin-stat-value {
+    display: block;
+    font-size: 20px;
+    font-weight: 700;
+    color: #667eea;
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
+.admin-stat-label {
+    display: block;
+    font-size: 11px;
+    color: #6d7387;
+    margin-top: 2px;
+}
+
+.admin-stat.warn .admin-stat-value {
+    color: #dc3545;
+}
+
+/* --- רשימת המשתמשים --- */
+.admin-users {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.admin-user {
+    background: white;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.07);
+}
+
+.admin-user-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 12px 14px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-align: right;
+    font-family: inherit;
+}
+
+.admin-user-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.admin-user-info h3 {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    font-size: 15px;
+    color: #333;
+    margin-bottom: 2px;
+}
+
+.admin-chevron {
+    flex-shrink: 0;
+    color: #9aa0b8;
+    font-size: 13px;
+    transition: transform 0.2s;
+}
+
+.admin-chevron.up {
+    transform: rotate(180deg);
+}
+
+.contact-badge.pending {
+    background: #fff4e0;
+    color: #a86412;
+}
+
+/* --- גוף המשתמש --- */
+.admin-user-body {
+    display: none;
+    padding: 0 14px 12px;
+}
+
+.admin-user-body.open {
+    display: block;
+}
+
+.admin-loading {
+    color: #8a90a6;
+    font-size: 13px;
+    padding: 8px 0;
+}
+
+.admin-group {
+    background: #f8f9fc;
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin-top: 8px;
+}
+
+.admin-group-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    font-size: 14px;
+    color: #333;
+    margin-bottom: 8px;
+}
+
+.admin-members {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.admin-members li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-size: 13px;
+    color: #555b73;
+    padding: 4px 0;
+}
+
+.admin-member-name {
+    font-weight: 600;
+    color: #3a3f52;
+}
+
+.admin-member-share {
+    color: #667eea;
+    font-size: 12px;
+}
+
+.admin-pending-title {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid #e6e8f2;
+    font-size: 12px;
+    font-weight: 700;
+    color: #a86412;
+}
+
+.admin-pending .contact-email {
+    font-size: 11px;
+    margin: 0;
+}
+
+.btn-force {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-right: auto;
+    padding: 5px 10px;
+    background: #28a745;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.btn-force:hover {
+    background: #218838;
+}
+
+@media (max-width: 600px) {
+    .admin-stats {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
