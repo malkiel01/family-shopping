@@ -410,15 +410,10 @@ function actionSetSplitMode(GroupContext $context) {
         ");
 
         if ($mode === 'percentage') {
-            // מעגלים כלפי מטה ומוסיפים את שארית העיגול לאחרון,
-            // כדי שהסכום יהיה בדיוק 100
-            $count     = count($members);
-            $share     = floor((100 / $count) * 100) / 100;
-            $remainder = round(100 - ($share * $count), 2);
+            $shares = equalPercentageShares(count($members));
 
             foreach ($members as $index => $member) {
-                $value = ($index === $count - 1) ? $share + $remainder : $share;
-                $update->execute(['percentage', $value, $member['id'], $context->groupId]);
+                $update->execute(['percentage', $shares[$index], $member['id'], $context->groupId]);
             }
         } elseif ($mode === 'shares') {
             foreach ($members as $member) {
@@ -552,6 +547,38 @@ function actionEditMember(GroupContext $context) {
  * מחלק 100% שווה בשווה בין כל החברים הפעילים.
  * זה המקרה הנפוץ ביותר, ובלעדיו המשתמש צריך לחשב ידנית.
  */
+/**
+ * מחלק 100% בין מספר נתון של משתתפים, בצורה שווה ככל שאפשר.
+ *
+ * 100 חלקי 7 אינו מספר עגול, ולכן מישהו תמיד יקבל קצת יותר.
+ * השאלה היא כמה. הגרסה הקודמת עיגלה כלפי מטה וזרקה את כל
+ * השארית על האחרון, כך שהוא קיבל 14.32% מול 14.28% של כולם -
+ * פער של 0.04. כאן השארית מפוזרת באגורות בודדות, ולכן הפער
+ * המרבי בין שני משתתפים הוא 0.01 בלבד.
+ *
+ * החישוב נעשה במאיות שלמות כדי להימנע משגיאות נקודה צפה.
+ *
+ * @return float[] מערך ערכים באורך $count, שסכומו בדיוק 100
+ */
+function equalPercentageShares($count) {
+    if ($count <= 0) {
+        return [];
+    }
+
+    $totalUnits = 10000;                      // 100.00% במאיות
+    $base       = intdiv($totalUnits, $count);
+    $leftover   = $totalUnits % $count;
+
+    $shares = [];
+    for ($i = 0; $i < $count; $i++) {
+        // המאיות שנותרו מתחלקות אחת-אחת בין הראשונים
+        $units    = $base + ($i < $leftover ? 1 : 0);
+        $shares[] = $units / 100;
+    }
+
+    return $shares;
+}
+
 function actionSplitEqually(GroupContext $context) {
     $stmt = $context->pdo->prepare("
         SELECT id FROM group_members WHERE group_id = ? AND is_active = 1 ORDER BY joined_at, id
@@ -565,10 +592,7 @@ function actionSplitEqually(GroupContext $context) {
         return;
     }
 
-    // מעגלים כלפי מטה ומוסיפים את שארית העיגול לאחרון,
-    // כדי שהסכום יהיה בדיוק 100
-    $share     = floor((100 / $count) * 100) / 100;
-    $remainder = round(100 - ($share * $count), 2);
+    $shares = equalPercentageShares($count);
 
     $context->pdo->beginTransaction();
     try {
@@ -579,8 +603,7 @@ function actionSplitEqually(GroupContext $context) {
         ");
 
         foreach ($memberIds as $index => $memberId) {
-            $value = ($index === $count - 1) ? $share + $remainder : $share;
-            $stmt->execute([$value, $memberId, $context->groupId]);
+            $stmt->execute([$shares[$index], $memberId, $context->groupId]);
         }
 
         $context->pdo->commit();
@@ -589,13 +612,19 @@ function actionSplitEqually(GroupContext $context) {
         throw $e;
     }
 
+    // כשהחלוקה אינה עגולה, חלק מהמשתתפים מקבלים אגורה אחת יותר,
+    // ולכן ההודעה מציגה את הטווח ולא מספר יחיד
+    $low     = min($shares);
+    $high    = max($shares);
+    $summary = ($low === $high) ? "{$low}% לכל משתתף" : "{$low}%-{$high}% לכל משתתף";
+
     notifyGroupMembers(
         $context, 'share_changed',
         'החלוקה ב"' . groupDisplayName($context) . '" עודכנה',
-        actorName() . " חילק את ההוצאות שווה בשווה - {$share}% לכל משתתף"
+        actorName() . ' חילק את ההוצאות שווה בשווה - ' . $summary
     );
 
-    jsonOk(['message' => "החלוקה עודכנה - {$share}% לכל משתתף"]);
+    jsonOk(['message' => 'החלוקה עודכנה - ' . $summary]);
 }
 
 function actionCancelInvitation(GroupContext $context) {

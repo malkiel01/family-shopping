@@ -563,6 +563,33 @@ check('תעריף בלי משתתפי נפשות נדחה', $r['success'] === fa
 $r = run($pdoS, 'setSplitMode', ['mode' => 'shares'], 2, false, 2);
 check('משתתף רגיל לא משנה שיטת חלוקה', $r['success'] === false);
 
+// ------------------------------------------------------------
+echo "\n14. הוגנות החלוקה השווה\n";
+// ------------------------------------------------------------
+// 100 חלקי 7 אינו עגול, ולכן מישהו תמיד מקבל קצת יותר.
+// השאלה היא כמה: הגרסה הקודמת זרקה את כל השארית על האחרון.
+foreach ([2, 3, 6, 7, 9, 13, 40] as $count) {
+    $shares = equalPercentageShares($count);
+    $sum    = array_sum($shares);
+    $spread = max($shares) - min($shares);
+
+    check("$count משתתפים: הסכום בדיוק 100", abs($sum - 100) < 0.0001, "התקבל $sum");
+    check("$count משתתפים: הפער לא עולה על 0.01", $spread <= 0.0101, "פער $spread");
+}
+
+// והמסלול המלא, מקצה לקצה: שבעה משתתפים בחלוקה שווה
+$pdoF = makeDb();
+$pdoF->exec("INSERT INTO group_members (group_id, user_id, nickname, email, participation_type, participation_value)
+    VALUES (1,4,'ד','d@e.com','percentage',0), (1,5,'ה','e@e.com','percentage',0),
+           (1,6,'ו','f@e.com','percentage',0), (1,7,'ז','g@e.com','percentage',0)");
+run($pdoF, 'splitEqually', [], 1, true, 1);
+$values = $pdoF->query("SELECT participation_value FROM group_members WHERE is_active = 1")
+    ->fetchAll(PDO::FETCH_COLUMN);
+$values = array_map('floatval', $values);
+check('שבעה משתתפים מסתכמים ל-100', abs(array_sum($values) - 100) < 0.0001, array_sum($values));
+check('אף אחד לא נושא את כל השארית', (max($values) - min($values)) <= 0.0101,
+    'פער ' . (max($values) - min($values)));
+
 echo "\n" . str_repeat('=', 55) . "\n";
 echo "עבר: $pass | נכשל: $fail\n";
 exit($fail > 0 ? 1 : 0);
