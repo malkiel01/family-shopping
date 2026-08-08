@@ -244,11 +244,11 @@ function renderGroupDetail(groupId, data) {
         </li>
     `).join('');
 
-    const name = document.querySelector('#group-' + groupId)
-        .closest('.admin-user').querySelector('h3').textContent.trim();
-
-    const card     = document.querySelector('#group-' + groupId).closest('.admin-user');
-    const isDeleted = card.querySelector('h3').textContent.includes('מושבת');
+    // השם והמצב מגיעים מהשרת. הגרסה הקודמת חילצה אותם מטקסט
+    // הכותרת שבמסך, אבל הכותרת מכילה גם תגיות כמו "מושבת" -
+    // ולכן השם שנשלח לאישור המחיקה מעולם לא תאם למה שהוקלד.
+    const name      = data.name;
+    const isDeleted = (data.is_active === 0);
 
     // פעולות ההרס מופרדות משאר הפעולות, כדי שלא ייראו כמו
     // עוד כפתור באותה שורה

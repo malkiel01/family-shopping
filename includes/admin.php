@@ -309,6 +309,13 @@ function adminListGroups(PDO $pdo) {
 function adminGroupDetail(PDO $pdo, $groupId) {
     $groupId = (int)$groupId;
 
+    // שם האירוע ומצבו נמסרים מהשרת ולא נגזרים מהטקסט שבמסך.
+    // הכותרת במסך מכילה גם תגיות כמו "מושבת" או "סגור", וכל
+    // ניסיון לחלץ ממנה שם מחזיר מחרוזת מלוכלכת.
+    $stmt = $pdo->prepare("SELECT name, is_active, status FROM purchase_groups WHERE id = ?");
+    $stmt->execute([$groupId]);
+    $group = $stmt->fetch(PDO::FETCH_ASSOC);
+
     $stmt = $pdo->prepare("
         SELECT gm.id, gm.nickname, gm.email, gm.participation_type, gm.participation_value,
                gm.user_id, u.name AS user_name
@@ -345,6 +352,9 @@ function adminGroupDetail(PDO $pdo, $groupId) {
     $candidates = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     return [
+        'name'       => $group['name'] ?? '',
+        'is_active'  => (int)($group['is_active'] ?? 1),
+        'status'     => $group['status'] ?? 'active',
         'members'    => $members,
         'pending'    => $pending,
         'candidates' => $candidates,
