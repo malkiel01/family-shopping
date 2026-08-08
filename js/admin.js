@@ -44,6 +44,19 @@ function esc(value) {
     return div.innerHTML;
 }
 
+/**
+ * מכין מחרוזת שתעבור כארגומנט בתוך onclick של תכונת HTML.
+ *
+ * JSON.stringify עוטף בגרשיים כפולים, ואלה סוגרים את התכונה
+ * עצמה באמצע - כך שהכפתור פשוט לא עשה כלום. הקידוד ל-&quot;
+ * משאיר את הערך תקין אחרי שהדפדפן מפענח את התכונה.
+ */
+function jsArg(value) {
+    return JSON.stringify(String(value === null || value === undefined ? '' : value))
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;');
+}
+
 function participationText(type, value) {
     if (type === 'shares')     return Math.round(value) + ' נפשות';
     if (type === 'percentage') return value + '%';
@@ -119,7 +132,7 @@ function renderGroups(groups) {
                     ${Number(group.is_owner) ? '<span class="contact-badge registered">מנהל</span>' : ''}
                     ${group.status === 'closed' ? '<span class="contact-badge">סגור</span>' : ''}
                     ${Number(group.my_membership) === 0 ? '<span class="contact-badge">חברות מושבתת</span>' : ''}
-                    <button class="btn-force" onclick="openAddToGroup(${Number(group.id)}, ${JSON.stringify(group.name)})">
+                    <button class="btn-force" onclick="openAddToGroup(${Number(group.id)}, ${jsArg(group.name)})">
                         <i class="fas fa-user-plus"></i> צרף
                     </button>
                 </div>
@@ -240,13 +253,13 @@ function renderGroupDetail(groupId, data) {
     // פעולות ההרס מופרדות משאר הפעולות, כדי שלא ייראו כמו
     // עוד כפתור באותה שורה
     const danger = isDeleted
-        ? `<button class="btn-restore-admin" onclick="adminGroupAction(${Number(groupId)}, 'restore', ${JSON.stringify(name)})">
+        ? `<button class="btn-restore-admin" onclick="adminGroupAction(${Number(groupId)}, 'restore', ${jsArg(name)})">
                <i class="fas fa-rotate-left"></i> שחזר
            </button>
-           <button class="btn-purge-admin" onclick="adminGroupAction(${Number(groupId)}, 'purge', ${JSON.stringify(name)})">
+           <button class="btn-purge-admin" onclick="adminGroupAction(${Number(groupId)}, 'purge', ${jsArg(name)})">
                <i class="fas fa-trash"></i> מחק לצמיתות
            </button>`
-        : `<button class="btn-purge-admin soft" onclick="adminGroupAction(${Number(groupId)}, 'soft', ${JSON.stringify(name)})">
+        : `<button class="btn-purge-admin soft" onclick="adminGroupAction(${Number(groupId)}, 'soft', ${jsArg(name)})">
                <i class="fas fa-trash-can"></i> מחק אירוע
            </button>`;
 
@@ -254,7 +267,7 @@ function renderGroupDetail(groupId, data) {
         <div class="admin-group">
             <div class="admin-group-head">
                 <strong>משתתפים</strong>
-                <button class="btn-force" onclick="openAddToGroup(${Number(groupId)}, ${JSON.stringify(name)})">
+                <button class="btn-force" onclick="openAddToGroup(${Number(groupId)}, ${jsArg(name)})">
                     <i class="fas fa-user-plus"></i> צרף משתתף
                 </button>
             </div>

@@ -13,6 +13,19 @@ if (defined('APP_CONFIG_LOADED')) {
 }
 define('APP_CONFIG_LOADED', true);
 
+/**
+ * define שאינו מתלונן אם הקבוע כבר קיים.
+ *
+ * השמירה למעלה אמורה להספיק, אבל האזהרות המשיכו להופיע בלוג
+ * גם אחריה - כלומר יש מסלול טעינה שהיא לא תופסת. במקום לנחש
+ * מהו, כל קבוע מוגדר בצורה שממילא אינה יכולה להתנגש.
+ */
+function defineOnce($name, $value) {
+    if (!defined($name)) {
+        define($name, $value);
+    }
+}
+
 // פונקציה פשוטה לטעינת קובץ .env
 function loadEnv($path = __DIR__ . '/.env') {
     if (!file_exists($path)) {
@@ -47,30 +60,30 @@ function loadEnv($path = __DIR__ . '/.env') {
 loadEnv();
 
 // הגדרות חיבור למסד נתונים מה-ENV
-define('DB_HOST', $_ENV['DB_HOST'] ?? 'localhost');
-define('DB_NAME', $_ENV['DB_NAME'] ?? 'database');
-define('DB_USER', $_ENV['DB_USER'] ?? 'root');
-define('DB_PASSWORD', $_ENV['DB_PASSWORD'] ?? '');
-define('DB_CHARSET', $_ENV['DB_CHARSET'] ?? 'utf8mb4');
+defineOnce('DB_HOST', $_ENV['DB_HOST'] ?? 'localhost');
+defineOnce('DB_NAME', $_ENV['DB_NAME'] ?? 'database');
+defineOnce('DB_USER', $_ENV['DB_USER'] ?? 'root');
+defineOnce('DB_PASSWORD', $_ENV['DB_PASSWORD'] ?? '');
+defineOnce('DB_CHARSET', $_ENV['DB_CHARSET'] ?? 'utf8mb4');
 // אל תשתמש בפורט 8080! זה לא פורט של MySQL
-// define('DB_PORT', $_ENV['PORT'] ?? '3306'); // <- מחק את זה!
+// defineOnce('DB_PORT', $_ENV['PORT'] ?? '3306'); // <- מחק את זה!
 
 // הגדרות Google Auth
-define('GOOGLE_CLIENT_ID', $_ENV['CLIENT_ID'] ?? '');
+defineOnce('GOOGLE_CLIENT_ID', $_ENV['CLIENT_ID'] ?? '');
 
 // הגדרות כלליות
-define('SITE_NAME', 'מנהל האירועים המשפחתי');
-define('TIMEZONE', 'Asia/Jerusalem');
-define('CURRENCY_SYMBOL', '₪');
+defineOnce('SITE_NAME', 'מנהל האירועים המשפחתי');
+defineOnce('TIMEZONE', 'Asia/Jerusalem');
+defineOnce('CURRENCY_SYMBOL', '₪');
 
 // נתיב הבסיס של האפליקציה באתר (בלי סלאש בסוף)
-define('APP_BASE_PATH', rtrim($_ENV['APP_BASE_PATH'] ?? '/family', '/'));
+defineOnce('APP_BASE_PATH', rtrim($_ENV['APP_BASE_PATH'] ?? '/family', '/'));
 
 // מפתחות Web Push. המפתח הציבורי נמסר לדפדפן בזמן ההרשמה למנוי,
 // והפרטי חותם את הבקשות לשירות ה-Push ולעולם לא יוצא מהשרת.
-define('VAPID_PUBLIC_KEY',  $_ENV['VAPID_PUBLIC_KEY'] ?? '');
-define('VAPID_PRIVATE_KEY', $_ENV['VAPID_PRIVATE_KEY'] ?? '');
-define('VAPID_SUBJECT',     $_ENV['VAPID_SUBJECT'] ?? 'mailto:noreply@mbe-plus.com');
+defineOnce('VAPID_PUBLIC_KEY',  $_ENV['VAPID_PUBLIC_KEY'] ?? '');
+defineOnce('VAPID_PRIVATE_KEY', $_ENV['VAPID_PRIVATE_KEY'] ?? '');
+defineOnce('VAPID_SUBJECT',     $_ENV['VAPID_SUBJECT'] ?? 'mailto:noreply@mbe-plus.com');
 
 /**
  * כתובת של קובץ סטטי, עם חותמת גרסה לפי זמן השינוי של הקובץ.
@@ -91,11 +104,11 @@ function asset($path) {
 }
 
 // הגדרות העלאת קבצים
-define('UPLOAD_DIR', 'uploads/');
-define('MAX_FILE_SIZE', 5242880);
+defineOnce('UPLOAD_DIR', 'uploads/');
+defineOnce('MAX_FILE_SIZE', 5242880);
 
 // הגדרת סביבת עבודה
-define('ENVIRONMENT', $_ENV['ENVIRONMENT'] ?? 'production');
+defineOnce('ENVIRONMENT', $_ENV['ENVIRONMENT'] ?? 'production');
 
 // הצג שגיאות רק בסביבת פיתוח
 if (ENVIRONMENT === 'development') {
