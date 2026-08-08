@@ -955,3 +955,109 @@ body {
     background: #e3d9f8;
     color: #5a2fb8;
 }
+
+/* ============================================================
+   אירועים שנמחקו
+   ============================================================ */
+
+.deleted-section {
+    margin-top: 20px;
+    opacity: 0.95;
+}
+
+.deleted-note {
+    color: #6d7387;
+    font-size: 13px;
+    line-height: 1.5;
+    margin-bottom: 14px;
+}
+
+.deleted-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.deleted-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    background: #f8f9fc;
+    border: 2px dashed #d9dced;
+    border-radius: 12px;
+    padding: 12px 14px;
+}
+
+.deleted-info {
+    min-width: 0;
+    flex: 1;
+}
+
+.deleted-info h3 {
+    font-size: 15px;
+    color: #4a4f63;
+    margin-bottom: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.deleted-info p {
+    font-size: 12px;
+    color: #8a90a6;
+}
+
+.deleted-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.btn-restore,
+.btn-purge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 8px 12px;
+    border: none;
+    border-radius: 9px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.btn-restore {
+    background: #e6f0fe;
+    color: #2b6cb0;
+}
+
+.btn-restore:hover {
+    background: #d6e6fd;
+}
+
+/* מחיקה בלתי הפיכה - מסומנת בבירור ולא נראית כמו פעולה רגילה */
+.btn-purge {
+    background: #fdecec;
+    color: #c53030;
+}
+
+.btn-purge:hover {
+    background: #f9d6d6;
+}
+
+@media (max-width: 600px) {
+    .deleted-actions {
+        width: 100%;
+    }
+
+    .btn-restore,
+    .btn-purge {
+        flex: 1;
+        justify-content: center;
+    }
+}

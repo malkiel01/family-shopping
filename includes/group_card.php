@@ -81,7 +81,14 @@ $dateLabel = eventDateLabel($group['event_date'] ?? null);
             <i class="fas fa-sign-in-alt"></i>
             <?php echo $isClosed ? 'צפה באירוע' : 'כניסה לאירוע'; ?>
         </a>
-        <?php if (!$group['is_owner']): ?>
+        <?php if ($group['is_owner']): ?>
+        <?php // מנהל אינו יכול לעזוב את האירוע שלו, אבל כן למחוק אותו ?>
+        <button class="btn-leave" title="מחיקת האירוע"
+                onclick="deleteGroup(<?php echo (int)$group['id']; ?>,
+                    <?php echo htmlspecialchars(json_encode($group['name'], JSON_UNESCAPED_UNICODE), ENT_QUOTES); ?>)">
+            <i class="fas fa-trash-can"></i> מחק
+        </button>
+        <?php else: ?>
         <button class="btn-leave" onclick="leaveGroup(<?php echo (int)$group['id']; ?>)">
             <i class="fas fa-sign-out-alt"></i> עזוב
         </button>

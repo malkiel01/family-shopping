@@ -21,6 +21,7 @@ function notifyNewPurchase($purchaseId) {
 }
 
 require_once __DIR__ . '/../includes/group_actions.php';
+require_once __DIR__ . '/../includes/group_delete.php';
 
 // ------------------------------------------------------------
 // תשתית בדיקה
@@ -143,6 +144,7 @@ function makeDb() {
 
 $_SERVER['HTTP_HOST']   = 'example.com';
 $_SERVER['SCRIPT_NAME'] = '/family/group.php';
+$_SESSION['name']       = 'דנה';
 
 // ------------------------------------------------------------
 echo "1. הרשאות\n";
@@ -625,6 +627,63 @@ $owner2 = (int)$pdoO2->query("SELECT member_id FROM group_purchases WHERE id = $
 check('אך הבעלות נשארה שלו', $owner2 === 2, "member_id: $owner2");
 $amount2 = (float)$pdoO2->query("SELECT amount FROM group_purchases WHERE id = $pid2")->fetchColumn();
 check('והסכום כן התעדכן', $amount2 === 90.0, $amount2);
+
+// ------------------------------------------------------------
+echo "\n16. מחיקת אירוע\n";
+// ------------------------------------------------------------
+$pdoD = makeDb();
+run($pdoD, 'addPurchase', ['member_id' => 1, 'amount' => 120, 'excluded_ids' => [3]], 1, true, 1);
+run($pdoD, 'addItem', ['title' => 'לחם'], 1, true, 1);
+run($pdoD, 'addSettlement', ['from_member_id' => 2, 'to_member_id' => 1, 'amount' => 40], 1, true, 1);
+
+// מחיקה רגילה
+$r = softDeleteGroup($pdoD, 1, 1);
+check('המנהל מוחק את האירוע', $r['ok'] === true, $r['message']);
+$active = (int)$pdoD->query("SELECT is_active FROM purchase_groups WHERE id = 1")->fetchColumn();
+check('האירוע סומן כלא פעיל', $active === 0);
+$purchases = (int)$pdoD->query("SELECT COUNT(*) FROM group_purchases WHERE group_id = 1")->fetchColumn();
+check('הנתונים נשמרו במחיקה רגילה', $purchases === 1, "קניות: $purchases");
+
+$r = softDeleteGroup($pdoD, 1, 1);
+check('מחיקה חוזרת נדחית', $r['ok'] === false);
+
+// רק הבעלים
+$r = softDeleteGroup($pdoD, 1, 2);
+check('משתתף רגיל לא מוחק אירוע', $r['ok'] === false);
+
+// שחזור
+$r = restoreGroup($pdoD, 1, 1);
+check('שחזור מצליח', $r['ok'] === true, $r['message']);
+$active = (int)$pdoD->query("SELECT is_active FROM purchase_groups WHERE id = 1")->fetchColumn();
+check('האירוע חזר להיות פעיל', $active === 1);
+
+// מחיקה לצמיתות: שם שגוי נדחה
+$r = purgeGroup($pdoD, 1, 1, 'שם אחר לגמרי');
+check('שם שגוי מבטל את המחיקה', $r['ok'] === false, $r['message']);
+$stillThere = (int)$pdoD->query("SELECT COUNT(*) FROM purchase_groups WHERE id = 1")->fetchColumn();
+check('האירוע עדיין קיים', $stillThere === 1);
+
+// לא הבעלים
+$r = purgeGroup($pdoD, 1, 2, 'פסח');
+check('משתתף רגיל לא מוחק לצמיתות', $r['ok'] === false);
+
+// והמחיקה האמיתית
+$r = purgeGroup($pdoD, 1, 1, 'פסח');
+check('מחיקה לצמיתות מצליחה עם השם הנכון', $r['ok'] === true, $r['message']);
+
+foreach ([
+    'purchase_groups'     => 'האירוע',
+    'group_members'       => 'המשתתפים',
+    'group_purchases'     => 'הקניות',
+    'shopping_items'      => 'רשימת הקניות',
+    'settlements'         => 'ההתחשבנויות',
+    'purchase_exclusions' => 'ההחרגות',
+] as $table => $label) {
+    $where = $table === 'purchase_groups' ? 'id = 1'
+        : ($table === 'purchase_exclusions' ? '1=1' : 'group_id = 1');
+    $left  = (int)$pdoD->query("SELECT COUNT(*) FROM $table WHERE $where")->fetchColumn();
+    check("$label נמחקו", $left === 0, "נותרו: $left");
+}
 
 echo "\n" . str_repeat('=', 55) . "\n";
 echo "עבר: $pass | נכשל: $fail\n";

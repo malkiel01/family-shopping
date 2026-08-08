@@ -208,3 +208,50 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 });
+
+// ============================================================
+// מחיקת אירוע
+// ============================================================
+
+async function deleteGroup(groupId, groupName) {
+    const message = 'למחוק את האירוע "' + groupName + '"?\n\n'
+        + 'האירוע ייעלם מכל המשתתפים, אבל הנתונים יישמרו ותוכל לשחזר אותו.';
+
+    if (!confirm(message)) return;
+
+    const data = await callAction('deleteGroup', { group_id: groupId });
+    if (data) location.reload();
+}
+
+async function restoreGroup(groupId) {
+    const data = await callAction('restoreGroup', { group_id: groupId });
+    if (data) location.reload();
+}
+
+async function purgeGroup(groupId, groupName) {
+    // מחיקה בלתי הפיכה, ולכן דורשת הקלדה מדויקת של השם ולא
+    // רק לחיצה על "אישור" - כדי שלא תקרה בהיסח הדעת
+    const typed = prompt(
+        'מחיקה לצמיתות של "' + groupName + '".\n\n'
+        + 'כל המשתתפים יוסרו, וכל הקניות, ההחרגות, הרשימה, ההתחשבנויות\n'
+        + 'ותמונות הקבלות יימחקו. אין דרך לשחזר.\n\n'
+        + 'להמשך, הקלד את שם האירוע במדויק:'
+    );
+
+    if (typed === null) return;
+
+    if (typed.trim() !== groupName.trim()) {
+        alert('השם שהוקלד אינו תואם. המחיקה בוטלה.');
+        return;
+    }
+
+    const data = await callAction('purgeGroup', {
+        group_id: groupId,
+        confirm_name: typed
+    });
+
+    if (data) {
+        alert(data.message);
+        location.reload();
+    }
+}

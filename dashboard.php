@@ -10,11 +10,13 @@ require_once 'includes/schema.php';
 require_once 'includes/notifications.php';
 require_once 'includes/participation.php';
 require_once 'includes/admin.php';
+require_once 'includes/group_delete.php';
 
 $pdo     = getDBConnection();
 $user_id = $_SESSION['user_id'];
 
 $featuresReady = eventFeaturesReady($pdo);
+$deletedGroups = listDeletedGroups($pdo, $user_id);
 
 // ============================================================
 // פעולות AJAX
@@ -91,6 +93,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 error_log("createGroup failed: " . $e->getMessage());
                 echo json_encode(['success' => false, 'message' => 'יצירת האירוע נכשלה']);
             }
+            exit;
+
+        case 'deleteGroup':
+            $result = softDeleteGroup($pdo, intval($_POST['group_id'] ?? 0), $user_id);
+            echo json_encode([
+                'success' => $result['ok'],
+                'message' => $result['message'],
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+
+        case 'restoreGroup':
+            $result = restoreGroup($pdo, intval($_POST['group_id'] ?? 0), $user_id);
+            echo json_encode([
+                'success' => $result['ok'],
+                'message' => $result['message'],
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+
+        case 'purgeGroup':
+            $result = purgeGroup(
+                $pdo,
+                intval($_POST['group_id'] ?? 0),
+                $user_id,
+                $_POST['confirm_name'] ?? ''
+            );
+            echo json_encode([
+                'success' => $result['ok'],
+                'message' => $result['message'],
+            ], JSON_UNESCAPED_UNICODE);
             exit;
 
         case 'leaveGroup':
@@ -446,6 +477,40 @@ function eventDateLabel($date) {
             <div class="groups-grid">
                 <?php foreach ($closedGroups as $group): ?>
                     <?php include 'includes/group_card.php'; ?>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <?php if (count($deletedGroups) > 0): ?>
+        <div class="groups-section deleted-section">
+            <h2><i class="fas fa-trash-can"></i> אירועים שמחקת</h2>
+            <p class="deleted-note">
+                האירועים האלה אינם מוצגים לאף אחד מהמשתתפים. הנתונים עדיין שמורים,
+                ואפשר לשחזר אותם או למחוק לצמיתות.
+            </p>
+            <div class="deleted-list">
+                <?php foreach ($deletedGroups as $deleted): ?>
+                <div class="deleted-card">
+                    <div class="deleted-info">
+                        <h3><?php echo htmlspecialchars($deleted['name']); ?></h3>
+                        <p>
+                            <?php echo (int)$deleted['member_count']; ?> משתתפים,
+                            <?php echo (int)$deleted['purchase_count']; ?> קניות
+                        </p>
+                    </div>
+                    <div class="deleted-actions">
+                        <button class="btn-restore"
+                                onclick="restoreGroup(<?php echo (int)$deleted['id']; ?>)">
+                            <i class="fas fa-rotate-left"></i> שחזר
+                        </button>
+                        <button class="btn-purge"
+                                onclick="purgeGroup(<?php echo (int)$deleted['id']; ?>,
+                                    <?php echo htmlspecialchars(json_encode($deleted['name'], JSON_UNESCAPED_UNICODE), ENT_QUOTES); ?>)">
+                            <i class="fas fa-trash"></i> מחק לצמיתות
+                        </button>
+                    </div>
+                </div>
                 <?php endforeach; ?>
             </div>
         </div>
