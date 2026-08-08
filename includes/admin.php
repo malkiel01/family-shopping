@@ -15,6 +15,7 @@
  */
 
 require_once __DIR__ . '/notifications.php';
+require_once __DIR__ . '/participation.php';
 
 /** האם עמודת ההרשאה קיימת. נבדק פעם אחת לכל בקשה. */
 function adminSchemaReady(PDO $pdo) {
@@ -121,18 +122,22 @@ function adminListUsers(PDO $pdo) {
  * הקבוצות של משתמש מסוים, עם רשימת החברים בכל אחת.
  */
 function adminUserGroups(PDO $pdo, $userId) {
+    // גם קבוצות שהמשתמש מנהל אך אינו חבר פעיל בהן, וגם כאלה
+    // שחברותו בהן הושבתה. במסך ניהול חשוב לראות את התמונה
+    // המלאה ולא רק את מה שהמשתמש עצמו רואה.
     $stmt = $pdo->prepare("
         SELECT pg.id, pg.name, pg.status, pg.event_date, pg.is_active,
                pg.owner_id, owner.name AS owner_name,
-               (pg.owner_id = ?) AS is_owner
+               (pg.owner_id = ?) AS is_owner,
+               MAX(CASE WHEN gm.user_id = ? THEN gm.is_active ELSE NULL END) AS my_membership
         FROM purchase_groups pg
         LEFT JOIN users owner ON owner.id = pg.owner_id
-        JOIN group_members gm ON gm.group_id = pg.id
-        WHERE gm.user_id = ? AND gm.is_active = 1
+        LEFT JOIN group_members gm ON gm.group_id = pg.id
+        WHERE pg.owner_id = ? OR gm.user_id = ?
         GROUP BY pg.id
         ORDER BY pg.id DESC
     ");
-    $stmt->execute([(int)$userId, (int)$userId]);
+    $stmt->execute([(int)$userId, (int)$userId, (int)$userId, (int)$userId]);
     $groups = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     if (!$groups) {
@@ -274,6 +279,181 @@ function adminForceAcceptInvitation(PDO $pdo, $adminId, $invitationId) {
     return [
         'ok'      => true,
         'message' => sprintf('%s צורף לקבוצה "%s"', $user['name'], $invitation['group_name']),
+    ];
+}
+
+/**
+ * כל האירועים במערכת, עם המנהל ומספר המשתתפים.
+ */
+function adminListGroups(PDO $pdo) {
+    $stmt = $pdo->query("
+        SELECT pg.id, pg.name, pg.status, pg.event_date, pg.is_active,
+               pg.owner_id, owner.name AS owner_name, owner.email AS owner_email,
+               (SELECT COUNT(*) FROM group_members gm
+                 WHERE gm.group_id = pg.id AND gm.is_active = 1) AS member_count,
+               (SELECT COUNT(*) FROM group_invitations gi
+                 WHERE gi.group_id = pg.id AND gi.status = 'pending') AS pending_count
+        FROM purchase_groups pg
+        LEFT JOIN users owner ON owner.id = pg.owner_id
+        ORDER BY pg.id DESC
+    ");
+
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+/**
+ * פירוט אירוע אחד: המשתתפים, ההזמנות הממתינות, ומי אפשר עוד
+ * לצרף אליו.
+ */
+function adminGroupDetail(PDO $pdo, $groupId) {
+    $groupId = (int)$groupId;
+
+    $stmt = $pdo->prepare("
+        SELECT gm.id, gm.nickname, gm.email, gm.participation_type, gm.participation_value,
+               gm.user_id, u.name AS user_name
+        FROM group_members gm
+        LEFT JOIN users u ON u.id = gm.user_id
+        WHERE gm.group_id = ? AND gm.is_active = 1
+        ORDER BY gm.joined_at, gm.id
+    ");
+    $stmt->execute([$groupId]);
+    $members = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $stmt = $pdo->prepare("
+        SELECT gi.id, gi.email, gi.nickname, gi.status, gi.created_at,
+               (SELECT u.id FROM users u WHERE u.email = gi.email) AS invitee_user_id
+        FROM group_invitations gi
+        WHERE gi.group_id = ? AND gi.status = 'pending'
+        ORDER BY gi.created_at DESC
+    ");
+    $stmt->execute([$groupId]);
+    $pending = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // משתמשים שאפשר עוד לצרף: כל מי שאינו כבר חבר פעיל
+    $stmt = $pdo->prepare("
+        SELECT u.id, u.name, u.email
+        FROM users u
+        WHERE u.is_active = 1
+          AND u.id NOT IN (
+              SELECT gm.user_id FROM group_members gm
+              WHERE gm.group_id = ? AND gm.is_active = 1 AND gm.user_id IS NOT NULL
+          )
+        ORDER BY u.name
+    ");
+    $stmt->execute([$groupId]);
+    $candidates = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    return [
+        'members'    => $members,
+        'pending'    => $pending,
+        'candidates' => $candidates,
+    ];
+}
+
+/**
+ * מצרף משתמש לאירוע ישירות, בלי לעבור דרך הזמנה.
+ *
+ * זו הרחבה של "אשר בשמו": שם מאשרים הזמנה שכבר נשלחה, וכאן
+ * מצרפים גם בלי שנשלחה בכלל. שתי הפעולות נרשמות ביומן, ובשתיהן
+ * המשתמש ומנהל האירוע מקבלים התראה.
+ *
+ * @return array{ok: bool, message: string}
+ */
+function adminAddUserToGroup(PDO $pdo, $adminId, $groupId, $targetUserId, $type, $value) {
+    $groupId      = (int)$groupId;
+    $targetUserId = (int)$targetUserId;
+
+    $stmt = $pdo->prepare("SELECT id, name FROM purchase_groups WHERE id = ? AND is_active = 1");
+    $stmt->execute([$groupId]);
+    $group = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$group) {
+        return ['ok' => false, 'message' => 'האירוע לא נמצא'];
+    }
+
+    $stmt = $pdo->prepare("SELECT id, name, email FROM users WHERE id = ? AND is_active = 1");
+    $stmt->execute([$targetUserId]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$user) {
+        return ['ok' => false, 'message' => 'המשתמש לא נמצא'];
+    }
+
+    if (!in_array($type, PARTICIPATION_TYPES, true)) {
+        $type = 'shares';
+    }
+
+    $value = $type === 'shares' ? max(1, (int)round((float)$value)) : round((float)$value, 2);
+
+    if ($value <= 0) {
+        return ['ok' => false, 'message' => 'ערך ההשתתפות חייב להיות חיובי'];
+    }
+
+    $pdo->beginTransaction();
+    try {
+        $stmt = $pdo->prepare("SELECT id, is_active FROM group_members WHERE group_id = ? AND user_id = ?");
+        $stmt->execute([$groupId, $targetUserId]);
+        $existing = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($existing && $existing['is_active']) {
+            $pdo->rollBack();
+
+            return ['ok' => false, 'message' => 'המשתמש כבר חבר פעיל באירוע'];
+        }
+
+        if ($existing) {
+            $stmt = $pdo->prepare("
+                UPDATE group_members
+                SET is_active = 1, nickname = ?, email = ?,
+                    participation_type = ?, participation_value = ?, joined_at = NOW()
+                WHERE id = ?
+            ");
+            $stmt->execute([$user['name'], $user['email'], $type, $value, $existing['id']]);
+        } else {
+            $stmt = $pdo->prepare("
+                INSERT INTO group_members
+                    (group_id, user_id, nickname, email, participation_type, participation_value)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ");
+            $stmt->execute([$groupId, $targetUserId, $user['name'], $user['email'], $type, $value]);
+        }
+
+        // הזמנה ממתינה לאותה כתובת מיותרת מרגע שהמשתמש צורף
+        $stmt = $pdo->prepare("
+            UPDATE group_invitations SET status = 'accepted', responded_at = NOW()
+            WHERE group_id = ? AND email = ? AND status = 'pending'
+        ");
+        $stmt->execute([$groupId, $user['email']]);
+
+        $pdo->commit();
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        error_log('Admin add to group failed: ' . $e->getMessage());
+
+        return ['ok' => false, 'message' => 'הצירוף נכשל'];
+    }
+
+    logAdminAction(
+        $pdo, $adminId, 'add_user_to_group', 'group', $groupId,
+        sprintf('צירוף %s (%s) כ-%s', $user['name'], $user['email'], participationLabel($type, $value))
+    );
+
+    queueNotification(
+        $pdo, $targetUserId, 'invitation_accepted',
+        'צורפת לאירוע "' . $group['name'] . '"',
+        'מנהל המערכת צירף אותך לאירוע, חלקך: ' . participationLabel($type, $value),
+        ['group_id' => $groupId, 'url' => groupUrl($groupId)]
+    );
+
+    notifyGroupOwner(
+        $pdo, $groupId, $adminId, 'invitation_accepted',
+        'משתתף נוסף לאירוע',
+        sprintf('%s צורף ל"%s" על ידי מנהל המערכת', $user['name'], $group['name'])
+    );
+
+    return [
+        'ok'      => true,
+        'message' => sprintf('%s צורף לאירוע "%s"', $user['name'], $group['name']),
     ];
 }
 

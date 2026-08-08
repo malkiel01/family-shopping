@@ -193,3 +193,57 @@
         grid-template-columns: repeat(2, 1fr);
     }
 }
+
+/* --- לשוניות --- */
+.admin-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+    background: white;
+    border-radius: 12px;
+    padding: 5px;
+    margin-bottom: 12px;
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.08);
+}
+
+.admin-tab {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 10px 8px;
+    background: none;
+    border: none;
+    border-radius: 9px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    color: #616780;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+
+.admin-tab.active {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.admin-owner-line {
+    font-size: 12px;
+    color: #7b8194;
+    margin-bottom: 4px;
+}
+
+.admin-modal-context {
+    margin: 0 0 14px;
+    padding: 8px 12px;
+    background: #f1f2f7;
+    border-radius: 9px;
+    font-weight: 600;
+    color: #4a4f63;
+    font-size: 14px;
+}
+
+.admin-group-head .btn-force {
+    margin-right: auto;
+}
