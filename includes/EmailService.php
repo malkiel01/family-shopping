@@ -1,6 +1,8 @@
 <?php
 // includes/EmailService.php - שירות שליחת אימיילים
 
+require_once __DIR__ . '/Smtp.php';
+
 class EmailService {
     private $pdo;
     private $fromEmail;
@@ -23,22 +25,43 @@ class EmailService {
             if (!$textBody) {
                 $textBody = strip_tags($htmlBody);
             }
-            
+
+            // שליחה דרך SMTP כשהוא מוגדר. mail() מוסר את ההודעה
+            // ל-sendmail המקומי ומחזיר true גם כשהיא נבלעת בדרך,
+            // ולכן הזמנות למי שאינו רשום פשוט לא הגיעו.
+            $smtp = Smtp::fromEnvironment();
+
+            if ($smtp !== null) {
+                $result = $smtp->send(
+                    ['email' => $this->fromEmail, 'name' => $this->fromName],
+                    $to, $subject, $htmlBody, $textBody
+                );
+
+                if ($result) {
+                    $this->logEmail($to, $subject, true);
+
+                    return true;
+                }
+
+                // נפילה חזרה ל-mail() עדיפה על אי-שליחה בכלל
+                error_log('SMTP failed, falling back to mail(): ' . $smtp->lastError());
+            }
+
             // הגדרת headers
             $headers = "From: {$this->fromName} <{$this->fromEmail}>\r\n";
             $headers .= "Reply-To: {$this->fromEmail}\r\n";
             $headers .= "MIME-Version: 1.0\r\n";
             $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
             $headers .= "X-Mailer: PHP/" . phpversion();
-            
+
             // שלח את האימייל
             $result = mail($to, $subject, $htmlBody, $headers);
-            
+
             // רשום בלוג
             $this->logEmail($to, $subject, $result);
-            
+
             return $result;
-            
+
         } catch (Exception $e) {
             error_log("Email sending error: " . $e->getMessage());
             return false;
@@ -67,7 +90,9 @@ class EmailService {
             }
             
             // בנה את ה-URL לאישור
-            $acceptUrl = "{$this->baseUrl}/accept-invitation.php?token=" . $invitation['token'];
+            // join.php הוא דף ההצטרפות בפועל. accept-invitation.php
+            // מעולם לא היה קיים, ולכן כל קישור במייל הוביל ל-404.
+            $acceptUrl = "{$this->baseUrl}/join.php?token=" . $invitation['token'];
             
             $subject = "הזמנה לקבוצת רכישה - {$invitation['group_name']}";
             
@@ -410,7 +435,7 @@ class EmailService {
             }
             
             // בנה את ה-URL המלא לאישור אוטומטי
-            $approveUrl = "{$this->baseUrl}/approve-invitation.php?token=" . $invitation['token'];
+            $approveUrl = "{$this->baseUrl}/join.php?token=" . $invitation['token'];
             
             // כותרת המייל
             $subject = "הזמנה לקבוצת רכישה - {$invitation['group_name']}";
