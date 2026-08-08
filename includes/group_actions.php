@@ -787,7 +787,7 @@ function actionUpdatePurchase(GroupContext $context) {
     }
 
     $stmt = $context->pdo->prepare("
-        SELECT user_id FROM group_purchases WHERE id = ? AND group_id = ?
+        SELECT user_id, member_id FROM group_purchases WHERE id = ? AND group_id = ?
     ");
     $stmt->execute([$purchaseId, $context->groupId]);
     $purchase = $stmt->fetch();
@@ -802,6 +802,27 @@ function actionUpdatePurchase(GroupContext $context) {
         return;
     }
 
+    // העברת בעלות על הקנייה שמורה למנהל, בדיוק כמו הרשאתו
+    // לרשום קנייה על שם משתתף אחר מלכתחילה
+    $memberId = (int)$purchase['member_id'];
+    if ($context->isOwner && isset($_POST['member_id'])) {
+        $requested = intval($_POST['member_id']);
+
+        if ($requested !== $memberId) {
+            $stmt = $context->pdo->prepare("
+                SELECT id FROM group_members WHERE id = ? AND group_id = ? AND is_active = 1
+            ");
+            $stmt->execute([$requested, $context->groupId]);
+
+            if (!$stmt->fetch()) {
+                jsonFail('יש לבחור משתתף תקין');
+                return;
+            }
+
+            $memberId = $requested;
+        }
+    }
+
     $exclusions = readExclusions($context);
     if (!$exclusions['ok']) {
         jsonFail($exclusions['message']);
@@ -811,20 +832,31 @@ function actionUpdatePurchase(GroupContext $context) {
     $context->pdo->beginTransaction();
     try {
         $stmt = $context->pdo->prepare("
-            UPDATE group_purchases SET amount = ?, description = ? WHERE id = ? AND group_id = ?
+            UPDATE group_purchases
+            SET amount = ?, description = ?, member_id = ?
+            WHERE id = ? AND group_id = ?
         ");
-        $stmt->execute([$amount, $description, $purchaseId, $context->groupId]);
+        $stmt->execute([$amount, $description, $memberId, $purchaseId, $context->groupId]);
 
         saveExclusions($context, $purchaseId, $exclusions['ids']);
 
         $context->pdo->commit();
 
         $symbol = defined('CURRENCY_SYMBOL') ? CURRENCY_SYMBOL : '₪';
+        $body   = actorName() . ' עדכן קנייה ל-' . $symbol . number_format((float)$amount, 2)
+            . ($description !== '' ? ' (' . $description . ')' : '');
+
+        // שינוי בעלות הוא שינוי מהותי בחשבון, ולכן מצוין במפורש
+        if ($memberId !== (int)$purchase['member_id']) {
+            $stmt = $context->pdo->prepare("SELECT nickname FROM group_members WHERE id = ?");
+            $stmt->execute([$memberId]);
+            $body .= '. הקנייה נרשמה עכשיו על ' . ($stmt->fetchColumn() ?: 'משתתף אחר');
+        }
+
         notifyGroupMembers(
             $context, 'purchase_updated',
             'קנייה עודכנה ב"' . groupDisplayName($context) . '"',
-            actorName() . ' עדכן קנייה ל-' . $symbol . number_format((float)$amount, 2)
-                . ($description !== '' ? ' (' . $description . ')' : ''),
+            $body,
             ['purchase_id' => (int)$purchaseId]
         );
     } catch (Exception $e) {

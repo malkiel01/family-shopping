@@ -245,7 +245,7 @@ function renderAddPurchaseModal($members, $is_owner, $member_id, $featuresReady 
     <?php
 }
 
-function renderEditPurchaseModal($members) {
+function renderEditPurchaseModal($members, $isOwner = false) {
     ?>
     <div id="editPurchaseModal" class="modal">
         <div class="modal-content">
@@ -255,6 +255,20 @@ function renderEditPurchaseModal($members) {
             </div>
             <form id="editPurchaseForm">
                 <input type="hidden" id="editPurchaseId">
+                <?php if ($isOwner): ?>
+                <?php // רק המנהל יכול להעביר בעלות על קנייה, בדיוק כפי
+                      // שרק הוא יכול לרשום קנייה על שם משתתף אחר ?>
+                <div class="form-group">
+                    <label for="editPurchaseMember">מי שילם:</label>
+                    <select id="editPurchaseMember">
+                        <?php foreach ($members as $member): ?>
+                        <option value="<?php echo (int)$member['id']; ?>">
+                            <?php echo htmlspecialchars($member['nickname']); ?>
+                        </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <?php endif; ?>
                 <div class="form-group">
                     <label for="editPurchaseAmount">סכום הקנייה (₪):</label>
                     <input type="number" id="editPurchaseAmount" step="0.01" min="0.01" required>

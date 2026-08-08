@@ -336,6 +336,13 @@ function editPurchase(purchase) {
     document.getElementById('editPurchaseId').value = purchase.id;
     document.getElementById('editPurchaseAmount').value = purchase.amount;
     document.getElementById('editPurchaseDescription').value = purchase.description || '';
+
+    // בורר הבעלות קיים רק אצל מנהל הקבוצה
+    const memberSelect = document.getElementById('editPurchaseMember');
+    if (memberSelect) {
+        memberSelect.value = purchase.member_id;
+    }
+
     setParticipants('edit', purchase.excluded);
     openModal('editPurchaseModal');
 }
@@ -551,10 +558,13 @@ document.addEventListener('DOMContentLoaded', function () {
                 return;
             }
 
+            const memberSelect = document.getElementById('editPurchaseMember');
+
             callAndReload('updatePurchase', {
                 purchase_id: document.getElementById('editPurchaseId').value,
                 amount: amount,
                 description: document.getElementById('editPurchaseDescription').value,
+                member_id: memberSelect ? memberSelect.value : null,
                 excluded_ids: getExcludedIds('edit')
             });
         });

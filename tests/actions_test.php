@@ -590,6 +590,42 @@ check('שבעה משתתפים מסתכמים ל-100', abs(array_sum($values) - 
 check('אף אחד לא נושא את כל השארית', (max($values) - min($values)) <= 0.0101,
     'פער ' . (max($values) - min($values)));
 
+// ------------------------------------------------------------
+echo "\n15. העברת בעלות על קנייה\n";
+// ------------------------------------------------------------
+$pdoO = makeDb();
+run($pdoO, 'addPurchase', ['member_id' => 1, 'amount' => 250, 'description' => 'דגים'], 1, true, 1);
+$pid = (int)$pdoO->query("SELECT MAX(id) FROM group_purchases")->fetchColumn();
+
+// המנהל מעביר את הקנייה למשתתף אחר
+$r = run($pdoO, 'updatePurchase', [
+    'purchase_id' => $pid, 'amount' => 250, 'description' => 'דגים', 'member_id' => 3,
+], 1, true, 1);
+check('המנהל מעביר בעלות', $r['success'] === true, $r['message'] ?? '');
+$owner = (int)$pdoO->query("SELECT member_id FROM group_purchases WHERE id = $pid")->fetchColumn();
+check('הבעלות עברה בפועל', $owner === 3, "member_id: $owner");
+
+// משתתף שאינו מוחרג נשאר מוחרג - הבעלות לא נוגעת בהחרגות
+$r = run($pdoO, 'updatePurchase', [
+    'purchase_id' => $pid, 'amount' => 250, 'member_id' => 99,
+], 1, true, 1);
+check('משתתף שאינו בקבוצה נדחה', $r['success'] === false);
+$owner = (int)$pdoO->query("SELECT member_id FROM group_purchases WHERE id = $pid")->fetchColumn();
+check('הבעלות לא השתנתה בעקבות ניסיון פסול', $owner === 3, "member_id: $owner");
+
+// חבר רגיל עורך קנייה שרשומה עליו, אך אינו יכול להעביר בעלות
+$pdoO2 = makeDb();
+run($pdoO2, 'addPurchase', ['member_id' => 2, 'amount' => 80], 2, false, 2);
+$pid2 = (int)$pdoO2->query("SELECT MAX(id) FROM group_purchases")->fetchColumn();
+$r = run($pdoO2, 'updatePurchase', [
+    'purchase_id' => $pid2, 'amount' => 90, 'member_id' => 3,
+], 2, false, 2);
+check('חבר רגיל עורך את הקנייה שלו', $r['success'] === true, $r['message'] ?? '');
+$owner2 = (int)$pdoO2->query("SELECT member_id FROM group_purchases WHERE id = $pid2")->fetchColumn();
+check('אך הבעלות נשארה שלו', $owner2 === 2, "member_id: $owner2");
+$amount2 = (float)$pdoO2->query("SELECT amount FROM group_purchases WHERE id = $pid2")->fetchColumn();
+check('והסכום כן התעדכן', $amount2 === 90.0, $amount2);
+
 echo "\n" . str_repeat('=', 55) . "\n";
 echo "עבר: $pass | נכשל: $fail\n";
 exit($fail > 0 ? 1 : 0);

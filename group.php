@@ -636,6 +636,7 @@ $canEdit = !$is_closed;
                                     "id"          => (int)$purchase["id"],
                                     "amount"      => (float)$purchase["amount"],
                                     "description" => $purchase["description"],
+                                    "member_id"   => (int)$purchase["member_id"],
                                     "excluded"    => $purchase["excluded_ids"],
                                 ], JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT); ?>)'>
                             <i class="fas fa-edit"></i> ערוך
@@ -674,7 +675,7 @@ $canEdit = !$is_closed;
     if ($featuresReady) {
         renderEventModal($group);
         renderItemModal();
-        renderEditPurchaseModal($members);
+        renderEditPurchaseModal($members, $is_owner);
     }
     renderAddPurchaseModal($members, $is_owner, $member_id, $featuresReady);
     renderImageModal();
