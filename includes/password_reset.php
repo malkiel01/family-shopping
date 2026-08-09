@@ -78,7 +78,9 @@ function requestPasswordReset(PDO $pdo, $email, $baseUrl) {
     }
 
     try {
-        $stmt = $pdo->prepare("SELECT id, name FROM users WHERE email = ? AND is_active = 1");
+        $stmt = $pdo->prepare("
+            SELECT id, name, auth_type, password FROM users WHERE email = ? AND is_active = 1
+        ");
         $stmt->execute([$email]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -87,6 +89,26 @@ function requestPasswordReset(PDO $pdo, $email, $baseUrl) {
         recordResetRequest($pdo, $email);
 
         if (!$user) {
+            return $generic;
+        }
+
+        // חשבון שנפתח דרך גוגל ואין לו סיסמה כלל: איפוס סיסמה
+        // אינו רלוונטי עבורו, והגדרת סיסמה חדשה רק תבלבל. נשלח
+        // מייל שמסביר איך הוא נכנס, בלי ליצור טוקן.
+        //
+        // ההודעה במסך נשארת זהה בכוונה. תשובה שונה הייתה מסגירה
+        // לא רק שהחשבון קיים, אלא גם באיזו שיטה הוא נכנס.
+        $isGoogleOnly = ($user['auth_type'] === 'google')
+            && empty($user['password']);
+
+        if ($isGoogleOnly) {
+            $mailer = new EmailService($pdo);
+            $mailer->sendEmail(
+                $email,
+                'הכניסה לחשבון שלך - ' . (defined('SITE_NAME') ? SITE_NAME : 'המערכת'),
+                googleAccountEmailBody($user['name'], rtrim($baseUrl, '/') . '/auth/login.php')
+            );
+
             return $generic;
         }
 
@@ -235,6 +257,42 @@ function completePasswordReset(PDO $pdo, $token, $password, $confirm) {
     }
 
     return ['ok' => true, 'message' => 'הסיסמה הוחלפה. אפשר להתחבר עכשיו'];
+}
+
+/** גוף המייל למי שנכנס דרך גוגל ואין לו סיסמה */
+function googleAccountEmailBody($name, $loginUrl) {
+    $safeName = htmlspecialchars($name, ENT_QUOTES, 'UTF-8');
+    $safeLink = htmlspecialchars($loginUrl, ENT_QUOTES, 'UTF-8');
+
+    return <<<HTML
+<div dir="rtl" style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto;
+     background: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e6e8f2;">
+    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+         color: #ffffff; padding: 22px; text-align: center;">
+        <h1 style="margin: 0; font-size: 20px;">הכניסה לחשבון שלך</h1>
+    </div>
+    <div style="padding: 24px; color: #333333; line-height: 1.7;">
+        <p style="margin: 0 0 14px;">שלום $safeName,</p>
+        <p style="margin: 0 0 14px;">
+            התקבלה בקשה לאיפוס סיסמה, אבל לחשבון שלך אין סיסמה - הוא נפתח
+            באמצעות <strong>כניסה עם Google</strong>.
+        </p>
+        <p style="margin: 0 0 14px;">
+            כדי להיכנס, פשוט לחץ על "התחבר עם Google" בדף הכניסה. אין צורך
+            לזכור סיסמה.
+        </p>
+        <p style="text-align: center; margin: 26px 0;">
+            <a href="$safeLink"
+               style="display: inline-block; background: #667eea; color: #ffffff;
+                      padding: 13px 30px; border-radius: 9px; text-decoration: none;
+                      font-weight: bold;">לדף הכניסה</a>
+        </p>
+        <p style="margin: 0; color: #6d7387; font-size: 13px;">
+            אם לא ביקשת דבר, אפשר להתעלם מההודעה. לא בוצע שום שינוי בחשבון.
+        </p>
+    </div>
+</div>
+HTML;
 }
 
 /** גוף המייל */
