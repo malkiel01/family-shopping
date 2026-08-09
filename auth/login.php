@@ -243,7 +243,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['register'])) {
                 </div>
 
                 <div class="forgot-password">
-                    <a href="#">שכחת סיסמה?</a>
+                    <a href="forgot-password.php">שכחת סיסמה?</a>
                 </div>
             </div>
             

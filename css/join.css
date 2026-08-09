@@ -148,3 +148,45 @@ body {
     unicode-bidi: isolate;
     direction: ltr;
 }
+
+/* טפסי איפוס סיסמה */
+.reset-form {
+    text-align: right;
+    margin: 18px 0 8px;
+}
+
+.reset-form .form-group {
+    margin-bottom: 14px;
+}
+
+.reset-form label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 600;
+    color: #333;
+    font-size: 14px;
+}
+
+.reset-form input {
+    width: 100%;
+    padding: 12px 14px;
+    border: 2px solid #e9ecef;
+    border-radius: 10px;
+    font-size: 15px;
+    font-family: inherit;
+}
+
+.reset-form input:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.reset-form .btn-primary {
+    width: 100%;
+    justify-content: center;
+}
+
+.error-text {
+    color: #c53030;
+    font-weight: 600;
+}

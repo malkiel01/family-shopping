@@ -476,6 +476,34 @@ step(
     }
 );
 
+// ============================================================
+echo "\nמיגרציה 008 - שחזור סיסמה\n";
+echo str_repeat('=', 60) . "\n";
+
+step(
+    'טבלה password_resets',
+    function () use ($pdo, $dbName) {
+        return !tableExists($pdo, $dbName, 'password_resets');
+    },
+    function () use ($pdo) {
+        // נשמר גיבוב של הטוקן ולא הטוקן עצמו. מי שמשיג גישה
+        // לטבלה לא יכול להתחזות לאיש, בדיוק כמו עם סיסמאות.
+        $pdo->exec("
+            CREATE TABLE `password_resets` (
+                `id`         INT AUTO_INCREMENT PRIMARY KEY,
+                `user_id`    INT          NOT NULL,
+                `token_hash` CHAR(64)     NOT NULL,
+                `expires_at` DATETIME     NOT NULL,
+                `used_at`    DATETIME     NULL DEFAULT NULL,
+                `ip`         VARCHAR(45)  NULL,
+                `created_at` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY `uniq_token` (`token_hash`),
+                INDEX `idx_resets_user` (`user_id`, `expires_at`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+    }
+);
+
 echo str_repeat('=', 60) . "\n";
 echo "בוצעו: $applied | דילוגים: $skipped | כשלונות: $failed\n";
 
