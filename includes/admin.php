@@ -175,6 +175,124 @@ function adminUserGroups(PDO $pdo, $userId) {
     return $groups;
 }
 
+// ============================================================
+// ניהול המשתמש עצמו
+// ============================================================
+
+/**
+ * מעניק או שולל הרשאת ניהול.
+ *
+ * שתי מגבלות, ושתיהן נועדו למנוע נעילה מוחלטת של המערכת:
+ * מנהל אינו יכול לשלול את ההרשאה מעצמו, ואי אפשר להוריד את
+ * המנהל האחרון - כי אז לא יישאר איש שיכול להחזיר אותה.
+ *
+ * @return array{ok: bool, message: string}
+ */
+function adminSetUserAdmin(PDO $pdo, $adminId, $targetId, $makeAdmin) {
+    $targetId  = (int)$targetId;
+    $makeAdmin = (bool)$makeAdmin;
+
+    if ($targetId === (int)$adminId && !$makeAdmin) {
+        return ['ok' => false, 'message' => 'אי אפשר לשלול את ההרשאה מעצמך'];
+    }
+
+    $stmt = $pdo->prepare("SELECT id, name, is_admin FROM users WHERE id = ?");
+    $stmt->execute([$targetId]);
+    $target = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$target) {
+        return ['ok' => false, 'message' => 'המשתמש לא נמצא'];
+    }
+
+    if ((bool)$target['is_admin'] === $makeAdmin) {
+        return ['ok' => false, 'message' => 'אין מה לשנות'];
+    }
+
+    if (!$makeAdmin) {
+        $admins = (int)$pdo->query("SELECT COUNT(*) FROM users WHERE is_admin = 1")->fetchColumn();
+
+        if ($admins <= 1) {
+            return ['ok' => false, 'message' => 'זהו המנהל היחיד. הענק הרשאה למישהו אחר קודם'];
+        }
+    }
+
+    $stmt = $pdo->prepare("UPDATE users SET is_admin = ? WHERE id = ?");
+    $stmt->execute([$makeAdmin ? 1 : 0, $targetId]);
+
+    logAdminAction(
+        $pdo, $adminId,
+        $makeAdmin ? 'grant_admin' : 'revoke_admin',
+        'user', $targetId,
+        sprintf('%s (%d)', $target['name'], $targetId)
+    );
+
+    return [
+        'ok'      => true,
+        'message' => $makeAdmin
+            ? $target['name'] . ' הוא כעת מנהל מערכת'
+            : 'הרשאת הניהול נשללה מ' . $target['name'],
+    ];
+}
+
+/**
+ * משבית או מפעיל חשבון משתמש.
+ *
+ * השבתה חוסמת התחברות ומסירה את המשתמש מכל בדיקת הרשאה, אבל
+ * אינה מוחקת דבר: החברויות, הקניות וההיסטוריה נשארות, וההפעלה
+ * מחזירה את המצב כפי שהיה.
+ *
+ * @return array{ok: bool, message: string}
+ */
+function adminSetUserActive(PDO $pdo, $adminId, $targetId, $active) {
+    $targetId = (int)$targetId;
+    $active   = (bool)$active;
+
+    if ($targetId === (int)$adminId && !$active) {
+        return ['ok' => false, 'message' => 'אי אפשר להשבית את החשבון שלך'];
+    }
+
+    $stmt = $pdo->prepare("SELECT id, name, is_active, is_admin FROM users WHERE id = ?");
+    $stmt->execute([$targetId]);
+    $target = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$target) {
+        return ['ok' => false, 'message' => 'המשתמש לא נמצא'];
+    }
+
+    if ((bool)$target['is_active'] === $active) {
+        return ['ok' => false, 'message' => 'אין מה לשנות'];
+    }
+
+    // השבתת מנהל היא בפועל שלילת הרשאה, כי isSystemAdmin
+    // דורש is_active. אותה מגבלה חלה גם כאן.
+    if (!$active && (int)$target['is_admin'] === 1) {
+        $admins = (int)$pdo->query("
+            SELECT COUNT(*) FROM users WHERE is_admin = 1 AND is_active = 1
+        ")->fetchColumn();
+
+        if ($admins <= 1) {
+            return ['ok' => false, 'message' => 'זהו המנהל הפעיל היחיד ולכן אי אפשר להשבית אותו'];
+        }
+    }
+
+    $stmt = $pdo->prepare("UPDATE users SET is_active = ? WHERE id = ?");
+    $stmt->execute([$active ? 1 : 0, $targetId]);
+
+    logAdminAction(
+        $pdo, $adminId,
+        $active ? 'enable_user' : 'disable_user',
+        'user', $targetId,
+        sprintf('%s (%d)', $target['name'], $targetId)
+    );
+
+    return [
+        'ok'      => true,
+        'message' => $active
+            ? 'החשבון של ' . $target['name'] . ' הופעל'
+            : 'החשבון של ' . $target['name'] . ' הושבת',
+    ];
+}
+
 /**
  * מאשר הצטרפות בשם המוזמן.
  *
@@ -522,9 +640,19 @@ function adminOverview(PDO $pdo) {
     };
 
     return [
-        'users'    => $one("SELECT COUNT(*) FROM users"),
-        'groups'   => $one("SELECT COUNT(*) FROM purchase_groups WHERE is_active = 1"),
-        'members'  => $one("SELECT COUNT(*) FROM group_members WHERE is_active = 1"),
-        'pending'  => $one("SELECT COUNT(*) FROM group_invitations WHERE status = 'pending'"),
+        'users'     => $one("SELECT COUNT(*) FROM users"),
+        'groups'    => $one("SELECT COUNT(*) FROM purchase_groups WHERE is_active = 1"),
+        'members'   => $one("SELECT COUNT(*) FROM group_members WHERE is_active = 1"),
+        'pending'   => $one("SELECT COUNT(*) FROM group_invitations WHERE status = 'pending'"),
+
+        // מספרים שמעניינים בסקירה אבל לא בכותרת של כל מסך
+        'admins'    => $one("SELECT COUNT(*) FROM users WHERE is_admin = 1"),
+        'inactive'  => $one("SELECT COUNT(*) FROM users WHERE is_active = 0"),
+        'closed'    => $one("SELECT COUNT(*) FROM purchase_groups WHERE status = 'closed' AND is_active = 1"),
+        'deleted'   => $one("SELECT COUNT(*) FROM purchase_groups WHERE is_active = 0"),
+        'purchases' => $one("SELECT COUNT(*) FROM group_purchases"),
+        'spent'     => $one("SELECT COALESCE(SUM(amount), 0) FROM group_purchases"),
+        'items'     => $one("SELECT COUNT(*) FROM shopping_items"),
+        'contacts'  => $one("SELECT COUNT(*) FROM contacts"),
     ];
 }
