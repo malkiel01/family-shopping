@@ -194,24 +194,33 @@
     }
 }
 
-/* --- לשוניות --- */
-.admin-tabs {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
+/* --- ניווט בין האזורים ---
+   גולל לרוחב במקום להידחס: האזורים אינם נכנסים לרוחב טלפון,
+   וכשהם נדחסים הטקסט נחתך ואי אפשר לזהות אף לשונית. */
+.admin-nav {
+    display: flex;
     gap: 6px;
     background: white;
     border-radius: 12px;
     padding: 5px;
     margin-bottom: 12px;
     box-shadow: 0 3px 12px rgba(0, 0, 0, 0.08);
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.admin-nav::-webkit-scrollbar {
+    display: none;
 }
 
 .admin-tab {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 7px;
-    padding: 10px 8px;
+    flex: 0 0 auto;
+    padding: 10px 14px;
     background: none;
     border: none;
     border-radius: 9px;
@@ -219,6 +228,7 @@
     font-size: 14px;
     font-weight: 600;
     color: #616780;
+    white-space: nowrap;
     cursor: pointer;
     transition: background 0.15s, color 0.15s;
 }
@@ -226,6 +236,18 @@
 .admin-tab.active {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
+}
+
+/* נקודה שמסמנת אזור שדורש תשומת לב */
+.admin-nav-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #e8a33d;
+}
+
+.admin-tab.active .admin-nav-dot {
+    background: white;
 }
 
 .admin-owner-line {
@@ -291,3 +313,578 @@
 .btn-restore-admin:hover { background: #d6e6fd; }
 .btn-purge-admin:hover   { background: #f9d6d6; }
 .btn-purge-admin.soft:hover { background: #e9ebf2; }
+
+/* ============================================================
+   כרטיסי האזורים - מערכת, יומן ותחזוקה
+   ============================================================ */
+
+.admin-card {
+    background: white;
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 12px;
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.07);
+}
+
+.admin-card-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-size: 15px;
+    color: #3a3f52;
+    margin-bottom: 10px;
+}
+
+.admin-card-title i {
+    color: #667eea;
+}
+
+.admin-pill {
+    margin-right: auto;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.admin-pill.ok   { background: #e8f6ec; color: #1f7a3d; }
+.admin-pill.warn { background: #fff4e0; color: #a86412; }
+
+.admin-note {
+    font-size: 12px;
+    line-height: 1.6;
+    color: #7b8194;
+    margin-bottom: 10px;
+}
+
+.admin-note code {
+    background: #f1f2f7;
+    border-radius: 5px;
+    padding: 1px 5px;
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
+/* --- בדיקות התקינות --- */
+.admin-checks {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.admin-check {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid #f1f2f7;
+}
+
+.admin-check:last-child {
+    border-bottom: none;
+}
+
+.admin-check i {
+    margin-top: 2px;
+    font-size: 14px;
+}
+
+.admin-check.ok   i { color: #28a745; }
+.admin-check.warn i { color: #e8a33d; }
+.admin-check.fail i { color: #dc3545; }
+
+.admin-check strong {
+    display: block;
+    font-size: 13px;
+    color: #3a3f52;
+}
+
+.admin-check span {
+    font-size: 12px;
+    color: #7b8194;
+}
+
+/* --- מספרים קטנים בשורה --- */
+.admin-mini-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 8px;
+}
+
+.admin-mini-stats > div {
+    background: #f8f9fc;
+    border-radius: 10px;
+    padding: 10px 8px;
+    text-align: center;
+    font-size: 11px;
+    color: #6d7387;
+}
+
+.admin-mini-stats > div span {
+    display: block;
+    font-size: 18px;
+    font-weight: 700;
+    color: #667eea;
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
+.admin-mini-stats > div.bad span {
+    color: #dc3545;
+}
+
+/* --- טבלת פרטי ההתקנה --- */
+.admin-info {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px 14px;
+    font-size: 13px;
+}
+
+.admin-info dt {
+    color: #7b8194;
+}
+
+.admin-info dd {
+    color: #3a3f52;
+    font-weight: 600;
+    direction: ltr;
+    unicode-bidi: plaintext;
+    text-align: right;
+    word-break: break-word;
+}
+
+/* --- רשימות שורות: מיילים ויומן --- */
+.admin-rows {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+}
+
+.admin-rows li {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 2px 10px;
+    padding: 9px 0;
+    border-bottom: 1px solid #f1f2f7;
+}
+
+.admin-rows li:last-child {
+    border-bottom: none;
+}
+
+.admin-row-main {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    font-size: 13px;
+    font-weight: 600;
+    color: #3a3f52;
+}
+
+.admin-row-sub {
+    grid-column: 1;
+    font-size: 12px;
+    color: #7b8194;
+    word-break: break-word;
+}
+
+.admin-row-time {
+    grid-row: 1 / span 2;
+    grid-column: 2;
+    align-self: center;
+    font-size: 11px;
+    color: #9aa0b8;
+    white-space: nowrap;
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
+.admin-rows li.bad .admin-row-main {
+    color: #c53030;
+}
+
+/* --- פעולות על משתמש --- */
+.admin-user-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 10px 0 2px;
+    border-bottom: 1px solid #f1f2f7;
+    margin-bottom: 4px;
+}
+
+.admin-user-actions .btn-force {
+    margin-right: 0;
+}
+
+.btn-force.neutral {
+    background: #6b7089;
+}
+
+.btn-force.neutral:hover {
+    background: #5a5f75;
+}
+
+.admin-self-note {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #7b8194;
+}
+
+/* ============================================================
+   מיגרציות
+   ============================================================ */
+
+.admin-actions-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
+.admin-run-status {
+    font-size: 12px;
+    font-weight: 600;
+    color: #667eea;
+}
+
+.admin-migrations {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.admin-migrations > li {
+    background: #f8f9fc;
+    border-radius: 10px;
+    padding: 10px 12px;
+}
+
+.admin-migrations > li.has-pending {
+    background: #fffaf0;
+}
+
+.admin-migration-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-size: 13px;
+    color: #3a3f52;
+}
+
+.admin-migration-head strong {
+    direction: ltr;
+    unicode-bidi: isolate;
+    color: #667eea;
+}
+
+.admin-migration-steps {
+    list-style: none;
+    margin-top: 7px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.admin-migration-steps li {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    direction: rtl;
+}
+
+.admin-migration-steps li.done {
+    color: #8f95a8;
+}
+
+.admin-migration-steps li.done i {
+    color: #28a745;
+}
+
+.admin-migration-steps li.pending {
+    color: #a86412;
+    font-weight: 600;
+}
+
+.admin-migration-steps li.pending i {
+    color: #e8a33d;
+}
+
+.admin-step-error {
+    color: #c53030;
+    font-size: 11px;
+}
+
+/* --- פלט ההרצה --- */
+.admin-run-log {
+    list-style: none;
+    background: #2d3142;
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+.admin-run-log li {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: #c9cddb;
+    padding: 2px 0;
+}
+
+.admin-run-log li.head {
+    margin-top: 8px;
+    font-weight: 700;
+    color: #9fb4ff;
+    direction: ltr;
+    unicode-bidi: plaintext;
+}
+
+.admin-run-log li.head:first-child {
+    margin-top: 0;
+}
+
+.admin-run-log li.applied i { color: #4ade80; }
+.admin-run-log li.skipped   { color: #7d8398; }
+.admin-run-log li.skipped i { color: #616780; }
+.admin-run-log li.failed    { color: #ff9b9b; }
+.admin-run-log li.failed i  { color: #ff6b6b; }
+
+.admin-log-note {
+    color: #9aa0b8;
+    font-size: 11px;
+}
+
+/* ============================================================
+   פעולות ניקוי
+   ============================================================ */
+
+.admin-tasks {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.admin-task {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #f8f9fc;
+    border-radius: 10px;
+    padding: 10px 12px;
+}
+
+.admin-task.danger {
+    background: #fdf1f1;
+}
+
+.admin-task-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.admin-task-text strong {
+    display: block;
+    font-size: 13px;
+    color: #3a3f52;
+}
+
+.admin-task-text span {
+    font-size: 12px;
+    color: #7b8194;
+}
+
+.admin-task .btn-secondary {
+    flex-shrink: 0;
+    padding: 7px 16px;
+    font-size: 13px;
+    width: auto;
+}
+
+.admin-task.danger .btn-secondary {
+    background: #fdecec;
+    color: #c53030;
+}
+
+/* --- פקודות טרמינל --- */
+.admin-commands {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.admin-commands li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: #7b8194;
+}
+
+.admin-commands code {
+    background: #2d3142;
+    color: #c9cddb;
+    border-radius: 6px;
+    padding: 4px 9px;
+    font-size: 12px;
+    direction: ltr;
+    unicode-bidi: isolate;
+    user-select: all;
+}
+
+@media (max-width: 600px) {
+    .admin-info {
+        grid-template-columns: 1fr;
+        gap: 2px;
+    }
+
+    .admin-info dd {
+        margin-bottom: 8px;
+        text-align: right;
+    }
+
+    .admin-task {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}
+
+/* ============================================================
+   הזמנות
+   ============================================================ */
+
+/* --- שבבי סינון --- */
+.admin-filter-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
+.admin-chip {
+    padding: 6px 13px;
+    background: white;
+    border: none;
+    border-radius: 999px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    color: #616780;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+.admin-chip.active {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+/* --- כרטיס הזמנה --- */
+.admin-invite {
+    background: white;
+    border-radius: 12px;
+    padding: 12px 14px;
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.07);
+}
+
+/* הזמנה תקועה מסומנת בפס בצד ולא בצבע רקע:
+   הרקע היה מתחרה בתגיות המצב שבתוך הכרטיס */
+.admin-invite.stale {
+    border-inline-start: 3px solid #e8a33d;
+}
+
+.admin-invite-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    font-size: 15px;
+    color: #333;
+    margin-bottom: 2px;
+}
+
+.admin-invite-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: #7b8194;
+    margin-top: 4px;
+}
+
+.admin-invite .contact-email {
+    font-size: 12px;
+    margin: 0;
+}
+
+.contact-badge.status-pending  { background: #fff4e0; color: #a86412; }
+.contact-badge.status-accepted { background: #e8f6ec; color: #1f7a3d; }
+.contact-badge.status-rejected { background: #fdecec; color: #c53030; }
+.contact-badge.status-expired  { background: #f1f2f7; color: #6b7089; }
+
+.admin-invite-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #f1f2f7;
+}
+
+.admin-invite-actions .btn-force {
+    margin-right: 0;
+}
+
+/* ============================================================
+   ייצוא
+   ============================================================ */
+
+.admin-export-buttons {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.admin-export-buttons .btn-secondary {
+    width: auto;
+    padding: 7px 16px;
+    font-size: 13px;
+    text-decoration: none;
+    text-align: center;
+}
+
+.admin-actions-row .btn-primary {
+    width: auto;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+}
+
+@media (max-width: 600px) {
+    .admin-export-buttons {
+        width: 100%;
+    }
+
+    .admin-export-buttons .btn-secondary {
+        flex: 1;
+    }
+}

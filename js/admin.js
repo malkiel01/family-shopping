@@ -96,7 +96,62 @@ async function toggleUser(userId) {
     }
 
     loadedUsers.add(userId);
-    body.innerHTML = renderGroups(data.groups);
+    body.innerHTML = renderUserActions(userId, body.dataset) + renderGroups(data.groups);
+}
+
+/**
+ * כפתורי ההרשאה וההשבתה של המשתמש.
+ *
+ * המנהל אינו רואה אותם על עצמו: השרת חוסם את שתי הפעולות ממילא,
+ * וכפתור שתמיד מחזיר שגיאה גרוע מכפתור שאינו קיים.
+ */
+function renderUserActions(userId, state) {
+    if (state.self === '1') {
+        return `
+            <div class="admin-user-actions">
+                <span class="admin-self-note">
+                    <i class="fas fa-user-shield"></i> זה החשבון שלך
+                </span>
+            </div>
+        `;
+    }
+
+    const isAdmin  = (state.admin === '1');
+    const isActive = (state.active === '1');
+
+    return `
+        <div class="admin-user-actions">
+            <button class="btn-force ${isAdmin ? 'neutral' : ''}"
+                    onclick="setUserFlag('setAdmin', ${Number(userId)}, ${isAdmin ? 0 : 1})">
+                <i class="fas ${isAdmin ? 'fa-user-minus' : 'fa-user-shield'}"></i>
+                ${isAdmin ? 'שלול הרשאת ניהול' : 'הפוך למנהל מערכת'}
+            </button>
+            <button class="btn-purge-admin ${isActive ? '' : 'soft'}"
+                    onclick="setUserFlag('setActive', ${Number(userId)}, ${isActive ? 0 : 1})">
+                <i class="fas ${isActive ? 'fa-ban' : 'fa-rotate-left'}"></i>
+                ${isActive ? 'השבת חשבון' : 'הפעל חשבון'}
+            </button>
+        </div>
+    `;
+}
+
+const FLAG_CONFIRM = {
+    'setAdmin:1':  'להפוך את המשתמש למנהל מערכת?\n\nהוא יראה את כל המשתמשים, כל האירועים וכל החברויות.',
+    'setAdmin:0':  'לשלול את הרשאת הניהול?',
+    'setActive:0': 'להשבית את החשבון?\n\nהמשתמש לא יוכל להתחבר, אבל שום נתון לא יימחק וההפעלה מחזירה הכל.',
+    'setActive:1': 'להפעיל מחדש את החשבון?'
+};
+
+async function setUserFlag(action, userId, value) {
+    if (!confirm(FLAG_CONFIRM[action + ':' + value])) {
+        return;
+    }
+
+    const data = await callAction(action, { user_id: userId, value: value });
+    if (!data) return;
+
+    alert(data.message);
+    location.reload();
 }
 
 function renderGroups(groups) {
@@ -172,17 +227,46 @@ function filterUsers() {
 }
 
 // ============================================================
-// לשוניות
+// אזורים
 // ============================================================
 
+/**
+ * מעבר בין אזורי הניהול.
+ *
+ * האזור הנבחר נשמר ב-sessionStorage, כי כמעט כל פעולה כאן
+ * מסתיימת ב-location.reload() - ובלי השמירה כל מחיקה או צירוף
+ * היו מחזירים את המנהל לתחילת המסך.
+ */
 function showAdminTab(name) {
-    const isUsers = (name === 'users');
+    if (!CONFIG.sections.includes(name)) {
+        name = CONFIG.sections[0];
+    }
 
-    document.getElementById('pane-users').style.display  = isUsers ? '' : 'none';
-    document.getElementById('pane-groups').style.display = isUsers ? 'none' : '';
-    document.getElementById('tab-users').classList.toggle('active', isUsers);
-    document.getElementById('tab-groups').classList.toggle('active', !isUsers);
+    CONFIG.sections.forEach(section => {
+        document.getElementById('pane-' + section).hidden = (section !== name);
+        document.getElementById('tab-' + section).classList.toggle('active', section === name);
+    });
+
+    try {
+        sessionStorage.setItem('adminSection', name);
+    } catch (error) {
+        // גלישה פרטית חוסמת אחסון. אין מה לעשות, וזה לא שובר כלום
+    }
 }
+
+document.addEventListener('DOMContentLoaded', function () {
+    let saved = null;
+
+    try {
+        saved = sessionStorage.getItem('adminSection');
+    } catch (error) {
+        saved = null;
+    }
+
+    if (saved) {
+        showAdminTab(saved);
+    }
+});
 
 // ============================================================
 // תצוגת האירועים
@@ -383,6 +467,190 @@ window.onclick = function (event) {
     const modal = document.getElementById('addToGroupModal');
     if (event.target === modal) closeAddToGroup();
 };
+
+// ============================================================
+// הזמנות
+// ============================================================
+
+let inviteFilter = 'pending';
+
+function setInviteFilter(value) {
+    inviteFilter = value;
+
+    document.querySelectorAll('#inviteFilters .admin-chip').forEach(chip => {
+        chip.classList.toggle('active', chip.dataset.filter === value);
+    });
+
+    filterInvitations();
+}
+
+function filterInvitations() {
+    const term  = document.getElementById('inviteSearch').value.trim().toLowerCase();
+    const cards = document.querySelectorAll('#invitationsList .admin-invite');
+    let visible = 0;
+
+    cards.forEach(card => {
+        const matchesFilter =
+            inviteFilter === 'all'   ? true :
+            inviteFilter === 'stale' ? card.dataset.stale === '1'
+                                     : card.dataset.status === inviteFilter;
+
+        const matchesTerm = term === '' || card.dataset.search.includes(term);
+        const show = matchesFilter && matchesTerm;
+
+        card.style.display = show ? '' : 'none';
+        if (show) visible++;
+    });
+
+    document.getElementById('noInvitations').style.display = visible === 0 ? '' : 'none';
+}
+
+/**
+ * מעתיק את קישור ההצטרפות.
+ *
+ * clipboard.writeText זמין רק בהקשר מאובטח, ובלעדיו לא קורה כלום
+ * והמנהל לא מבין למה. במקרה כזה הקישור מוצג ב-prompt כדי שאפשר
+ * יהיה לסמן ולהעתיק ידנית.
+ */
+async function copyInviteLink(button) {
+    const link = button.dataset.link;
+
+    try {
+        await navigator.clipboard.writeText(link);
+    } catch (error) {
+        prompt('העתק את הקישור:', link);
+        return;
+    }
+
+    const original = button.innerHTML;
+    button.innerHTML = '<i class="fas fa-check"></i> הועתק';
+
+    setTimeout(() => { button.innerHTML = original; }, 1500);
+}
+
+async function resendInvitation(invitationId) {
+    if (!confirm('לשלוח מחדש את מייל ההזמנה?')) {
+        return;
+    }
+
+    const data = await callAction('resendInvitation', { invitation_id: invitationId });
+    if (!data) return;
+
+    alert(data.message);
+}
+
+async function cancelInvitation(invitationId) {
+    if (!confirm('לבטל את ההזמנה?\n\nקישור ההצטרפות יפסיק לעבוד. אפשר תמיד להזמין מחדש.')) {
+        return;
+    }
+
+    const data = await callAction('cancelInvitation', { invitation_id: invitationId });
+    if (!data) return;
+
+    alert(data.message);
+    location.reload();
+}
+
+async function cancelStaleInvitations() {
+    if (!confirm('לבטל את כל ההזמנות שממתינות מעל 30 יום?\n\nהקישורים שלהן יפסיקו לעבוד.')) {
+        return;
+    }
+
+    const data = await callAction('cancelStaleInvitations', { days: 30 });
+    if (!data) return;
+
+    alert(data.message);
+    location.reload();
+}
+
+// ============================================================
+// תחזוקה ופיתוח
+// ============================================================
+
+const MIGRATION_STATES = {
+    migration: { css: 'head',    icon: '' },
+    applied:   { css: 'applied', icon: 'fa-check' },
+    skipped:   { css: 'skipped', icon: 'fa-forward' },
+    failed:    { css: 'failed',  icon: 'fa-xmark' }
+};
+
+async function runMigrations() {
+    const button = document.getElementById('runMigrationsBtn');
+    const status = document.getElementById('migrationsStatus');
+    const output = document.getElementById('migrationsOutput');
+
+    if (!confirm('להריץ את המיגרציות הממתינות?\n\nכל צעד נבדק לפני שהוא מורץ, וצעד שכבר בוצע ידולג.')) {
+        return;
+    }
+
+    button.disabled = true;
+    status.textContent = 'רץ...';
+    output.innerHTML = '';
+
+    const data = await callAction('runMigrations');
+
+    button.disabled = false;
+
+    if (!data) {
+        status.textContent = 'ההרצה נכשלה';
+        return;
+    }
+
+    status.textContent = data.message;
+    output.innerHTML = renderMigrationLog(data.log);
+}
+
+function renderMigrationLog(log) {
+    const rows = log.map(entry => {
+        const state = MIGRATION_STATES[entry.state] || MIGRATION_STATES.skipped;
+
+        if (entry.state === 'migration') {
+            return `<li class="head">${esc(entry.label)}</li>`;
+        }
+
+        return `
+            <li class="${state.css}">
+                <i class="fas ${state.icon}"></i>
+                ${esc(entry.label)}
+                ${entry.note ? `<span class="admin-log-note">${esc(entry.note)}</span>` : ''}
+            </li>
+        `;
+    }).join('');
+
+    return `
+        <ul class="admin-run-log">${rows}</ul>
+        <p class="admin-note">רענן את הדף כדי לראות את המצב המעודכן.</p>
+    `;
+}
+
+/**
+ * מריץ פעולת ניקוי.
+ *
+ * שם הפעולה ונוסח האישור מגיעים מתכונות הכפתור, ולא מרשימה
+ * שכפולה כאן: הרשימה מוגדרת פעם אחת ב-maintenanceTasks() בשרת,
+ * שהוא גם מי שאוכף אותה.
+ */
+async function runMaintenance(button) {
+    const task    = button.dataset.task;
+    const warning = button.dataset.confirm;
+
+    if (warning && !confirm(warning)) {
+        return;
+    }
+
+    const original = button.textContent;
+    button.disabled = true;
+    button.textContent = 'רץ...';
+
+    const data = await callAction('maintenance', { task: task });
+
+    button.disabled = false;
+    button.textContent = original;
+
+    if (!data) return;
+
+    alert(data.message);
+}
 
 /**
  * מחיקה, שחזור ומחיקה סופית של אירוע על ידי מנהל המערכת.
