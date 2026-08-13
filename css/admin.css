@@ -195,7 +195,7 @@
 }
 
 /* --- ניווט בין האזורים ---
-   גולל לרוחב במקום להידחס: שישה אזורים לא נכנסים לרוחב טלפון,
+   גולל לרוחב במקום להידחס: האזורים אינם נכנסים לרוחב טלפון,
    וכשהם נדחסים הטקסט נחתך ואי אפשר לזהות אף לשונית. */
 .admin-nav {
     display: flex;
@@ -763,5 +763,128 @@
     .admin-task {
         flex-direction: column;
         align-items: stretch;
+    }
+}
+
+/* ============================================================
+   הזמנות
+   ============================================================ */
+
+/* --- שבבי סינון --- */
+.admin-filter-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
+.admin-chip {
+    padding: 6px 13px;
+    background: white;
+    border: none;
+    border-radius: 999px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    color: #616780;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+.admin-chip.active {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+/* --- כרטיס הזמנה --- */
+.admin-invite {
+    background: white;
+    border-radius: 12px;
+    padding: 12px 14px;
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.07);
+}
+
+/* הזמנה תקועה מסומנת בפס בצד ולא בצבע רקע:
+   הרקע היה מתחרה בתגיות המצב שבתוך הכרטיס */
+.admin-invite.stale {
+    border-inline-start: 3px solid #e8a33d;
+}
+
+.admin-invite-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    font-size: 15px;
+    color: #333;
+    margin-bottom: 2px;
+}
+
+.admin-invite-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: #7b8194;
+    margin-top: 4px;
+}
+
+.admin-invite .contact-email {
+    font-size: 12px;
+    margin: 0;
+}
+
+.contact-badge.status-pending  { background: #fff4e0; color: #a86412; }
+.contact-badge.status-accepted { background: #e8f6ec; color: #1f7a3d; }
+.contact-badge.status-rejected { background: #fdecec; color: #c53030; }
+.contact-badge.status-expired  { background: #f1f2f7; color: #6b7089; }
+
+.admin-invite-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #f1f2f7;
+}
+
+.admin-invite-actions .btn-force {
+    margin-right: 0;
+}
+
+/* ============================================================
+   ייצוא
+   ============================================================ */
+
+.admin-export-buttons {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.admin-export-buttons .btn-secondary {
+    width: auto;
+    padding: 7px 16px;
+    font-size: 13px;
+    text-decoration: none;
+    text-align: center;
+}
+
+.admin-actions-row .btn-primary {
+    width: auto;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+}
+
+@media (max-width: 600px) {
+    .admin-export-buttons {
+        width: 100%;
+    }
+
+    .admin-export-buttons .btn-secondary {
+        flex: 1;
     }
 }

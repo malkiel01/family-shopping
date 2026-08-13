@@ -20,11 +20,20 @@ require_once 'config.php';
 require_once 'includes/auth_check.php';
 require_once 'includes/admin.php';
 require_once 'includes/admin_system.php';
+require_once 'includes/admin_invitations.php';
+require_once 'includes/admin_export.php';
 
 $pdo     = getDBConnection();
 $user_id = $_SESSION['user_id'];
 
 requireSystemAdmin($pdo, $user_id);
+
+// ============================================================
+// ייצוא - חייב לרוץ לפני כל פלט, כי הוא שולח כותרות הורדה
+// ============================================================
+if (isset($_GET['export'])) {
+    handleExportRequest($pdo, $user_id, $_GET['export'], $_GET['format'] ?? 'csv');
+}
 
 // ============================================================
 // פעולות AJAX
@@ -106,22 +115,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
         case 'maintenance':
             $respond(runMaintenanceTask($pdo, $user_id, $_POST['task'] ?? ''));
+
+        case 'resendInvitation':
+            $respond(adminResendInvitation($pdo, $user_id, intval($_POST['invitation_id'] ?? 0)));
+
+        case 'cancelInvitation':
+            $respond(adminCancelInvitation($pdo, $user_id, intval($_POST['invitation_id'] ?? 0)));
+
+        case 'cancelStaleInvitations':
+            $respond(adminCancelStaleInvitations($pdo, $user_id, intval($_POST['days'] ?? 30)));
     }
 
     echo json_encode(['success' => false, 'message' => 'פעולה לא מוכרת'], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
-$overview   = adminOverview($pdo);
-$users      = adminListUsers($pdo);
-$groups     = adminListGroups($pdo);
-$health     = systemHealthChecks($pdo);
-$info       = systemInfo($pdo);
-$stats      = notificationStats($pdo);
-$emails     = recentEmails($pdo);
-$auditLog   = recentAdminActions($pdo);
-$migrations = migrationStatus($pdo, DB_NAME);
-$tasks      = maintenanceTasks();
+$overview    = adminOverview($pdo);
+$users       = adminListUsers($pdo);
+$groups      = adminListGroups($pdo);
+$health      = systemHealthChecks($pdo);
+$info        = systemInfo($pdo);
+$stats       = notificationStats($pdo);
+$emails      = recentEmails($pdo);
+$auditLog    = recentAdminActions($pdo);
+$migrations  = migrationStatus($pdo, DB_NAME);
+$tasks       = maintenanceTasks();
+$invitations = adminListInvitations($pdo);
+$inviteCount = adminInvitationCounts($pdo);
+$datasets    = exportDatasets();
 
 /** כמה בדיקות תקינות אינן במצב תקין */
 $healthIssues = count(array_filter($health, function ($check) {
@@ -129,11 +150,13 @@ $healthIssues = count(array_filter($health, function ($check) {
 }));
 
 $sections = [
-    'overview'    => ['סקירה',        'fa-gauge-high'],
-    'users'       => ['משתמשים',      'fa-users'],
-    'groups'      => ['אירועים',      'fa-calendar-check'],
-    'system'      => ['מערכת',        'fa-server'],
-    'log'         => ['יומן פעולות',  'fa-clipboard-list'],
+    'overview'    => ['סקירה',         'fa-gauge-high'],
+    'users'       => ['משתמשים',       'fa-users'],
+    'groups'      => ['אירועים',       'fa-calendar-check'],
+    'invitations' => ['הזמנות',        'fa-envelope-open-text'],
+    'system'      => ['מערכת',         'fa-server'],
+    'export'      => ['ייצוא נתונים',  'fa-file-arrow-down'],
+    'log'         => ['יומן פעולות',   'fa-clipboard-list'],
     'maintenance' => ['תחזוקה ופיתוח', 'fa-screwdriver-wrench'],
 ];
 
@@ -180,6 +203,8 @@ function adminNum($value) {
                     <span class="admin-nav-dot" title="יש מיגרציות ממתינות"></span>
                 <?php elseif ($key === 'overview' && $healthIssues > 0): ?>
                     <span class="admin-nav-dot" title="<?php echo $healthIssues; ?> בדיקות דורשות תשומת לב"></span>
+                <?php elseif ($key === 'invitations' && $inviteCount['stale'] > 0): ?>
+                    <span class="admin-nav-dot" title="<?php echo $inviteCount['stale']; ?> הזמנות תקועות"></span>
                 <?php endif; ?>
             </button>
             <?php endforeach; ?>
@@ -378,6 +403,141 @@ function adminNum($value) {
             </p>
         </div><!-- pane-groups -->
 
+        <!-- ========================================== הזמנות -->
+        <div class="admin-pane" id="pane-invitations" hidden>
+            <div class="admin-card">
+                <h2 class="admin-card-title">
+                    <i class="fas fa-envelope-open-text"></i> הזמנות בכל האירועים
+                    <?php if ($inviteCount['stale'] > 0): ?>
+                        <span class="admin-pill warn"><?php echo $inviteCount['stale']; ?> תקועות</span>
+                    <?php endif; ?>
+                </h2>
+
+                <p class="admin-note">
+                    הזמנה שנתקעה לא מייצרת שגיאה ואף אחד לא מתלונן עליה — מנהל
+                    האירוע בכלל לא יודע שהיא לא הגיעה. הזמנה שממתינה מעל שבוע
+                    מסומנת כתקועה.
+                </p>
+
+                <div class="admin-mini-stats">
+                    <div><span><?php echo adminNum($inviteCount['pending']); ?></span>ממתינות</div>
+                    <div class="<?php echo $inviteCount['stale'] > 0 ? 'bad' : ''; ?>">
+                        <span><?php echo adminNum($inviteCount['stale']); ?></span>מעל שבוע
+                    </div>
+                    <div><span><?php echo adminNum($inviteCount['accepted']); ?></span>התקבלו</div>
+                    <div><span><?php echo adminNum($inviteCount['rejected']); ?></span>נדחו</div>
+                    <div><span><?php echo adminNum($inviteCount['expired']); ?></span>בוטלו</div>
+                </div>
+
+                <?php if ($inviteCount['stale'] > 0): ?>
+                <div class="admin-actions-row">
+                    <button class="btn-secondary" onclick="cancelStaleInvitations()">
+                        <i class="fas fa-broom"></i> בטל הזמנות שממתינות מעל 30 יום
+                    </button>
+                </div>
+                <?php endif; ?>
+            </div>
+
+            <div class="contacts-search">
+                <i class="fas fa-search"></i>
+                <input type="search" id="inviteSearch" placeholder="חיפוש לפי אימייל, שם או אירוע"
+                       oninput="filterInvitations()" autocomplete="off">
+            </div>
+
+            <div class="admin-filter-row" id="inviteFilters">
+                <?php
+                $inviteFilters = [
+                    'pending'  => 'ממתינות',
+                    'stale'    => 'תקועות',
+                    'accepted' => 'התקבלו',
+                    'rejected' => 'נדחו',
+                    'expired'  => 'בוטלו',
+                    'all'      => 'הכל',
+                ];
+                foreach ($inviteFilters as $value => $label):
+                ?>
+                <button class="admin-chip<?php echo $value === 'pending' ? ' active' : ''; ?>"
+                        data-filter="<?php echo $value; ?>" onclick="setInviteFilter('<?php echo $value; ?>')">
+                    <?php echo $label; ?>
+                </button>
+                <?php endforeach; ?>
+            </div>
+
+            <div class="admin-users" id="invitationsList">
+                <?php foreach ($invitations as $invite):
+                    $isStale = ($invite['status'] === 'pending' && (int)$invite['age_days'] >= 7);
+                ?>
+                <div class="admin-invite<?php echo $isStale ? ' stale' : ''; ?>"
+                     data-status="<?php echo htmlspecialchars((string)$invite['status']); ?>"
+                     data-stale="<?php echo $isStale ? '1' : '0'; ?>"
+                     data-search="<?php echo htmlspecialchars(mb_strtolower(
+                         $invite['email'] . ' ' . $invite['nickname'] . ' ' . $invite['group_name']
+                     )); ?>">
+                    <div class="admin-invite-main">
+                        <div class="admin-invite-head">
+                            <strong><?php echo htmlspecialchars((string)($invite['nickname'] ?: $invite['email'])); ?></strong>
+                            <span class="contact-badge status-<?php echo htmlspecialchars((string)$invite['status']); ?>">
+                                <?php echo htmlspecialchars(invitationStatusLabel((string)$invite['status'])); ?>
+                            </span>
+                            <?php if ($isStale): ?>
+                                <span class="contact-badge pending">
+                                    <?php echo (int)$invite['age_days']; ?> ימים
+                                </span>
+                            <?php endif; ?>
+                            <?php if (!$invite['group_active']): ?>
+                                <span class="contact-badge">האירוע נמחק</span>
+                            <?php endif; ?>
+                        </div>
+                        <p class="contact-email"><?php echo htmlspecialchars((string)$invite['email']); ?></p>
+                        <p class="admin-invite-meta">
+                            <?php echo htmlspecialchars((string)($invite['group_name'] ?: 'אירוע שנמחק')); ?>
+                            <?php if ($invite['inviter_name']): ?>
+                                · הזמין <?php echo htmlspecialchars((string)$invite['inviter_name']); ?>
+                            <?php endif; ?>
+                            · <?php echo htmlspecialchars(substr((string)$invite['created_at'], 0, 10)); ?>
+                            <?php if (!$invite['invitee_user_id']): ?>
+                                <span class="contact-badge">טרם נרשם למערכת</span>
+                            <?php endif; ?>
+                        </p>
+                    </div>
+
+                    <?php if ($invite['status'] === 'pending'): ?>
+                    <div class="admin-invite-actions">
+                        <button class="btn-force" title="העתק קישור הצטרפות"
+                                data-link="<?php echo htmlspecialchars((string)$invite['link'], ENT_QUOTES); ?>"
+                                onclick="copyInviteLink(this)">
+                            <i class="fas fa-link"></i> העתק קישור
+                        </button>
+                        <button class="btn-force neutral" title="שלח את מייל ההזמנה מחדש"
+                                onclick="resendInvitation(<?php echo (int)$invite['id']; ?>)">
+                            <i class="fas fa-paper-plane"></i> שלח שוב
+                        </button>
+                        <?php if ($invite['invitee_user_id']): ?>
+                        <button class="btn-force" onclick="forceAccept(<?php echo (int)$invite['id']; ?>)">
+                            <i class="fas fa-user-check"></i> אשר בשמו
+                        </button>
+                        <?php endif; ?>
+                        <button class="btn-purge-admin" onclick="cancelInvitation(<?php echo (int)$invite['id']; ?>)">
+                            <i class="fas fa-xmark"></i> בטל
+                        </button>
+                    </div>
+                    <?php endif; ?>
+                </div>
+                <?php endforeach; ?>
+            </div>
+
+            <?php if (count($invitations) >= INVITATIONS_LIMIT): ?>
+            <p class="admin-note">
+                מוצגות <?php echo INVITATIONS_LIMIT; ?> ההזמנות האחרונות בלבד.
+                לרשימה המלאה השתמש בייצוא הנתונים.
+            </p>
+            <?php endif; ?>
+
+            <p class="contacts-no-results" id="noInvitations" style="display: none;">
+                אין הזמנות שתואמות לסינון
+            </p>
+        </div><!-- pane-invitations -->
+
         <!-- =========================================== מערכת -->
         <div class="admin-pane" id="pane-system" hidden>
             <div class="admin-card">
@@ -451,6 +611,61 @@ function adminNum($value) {
                 <?php endif; ?>
             </div>
         </div><!-- pane-system -->
+
+        <!-- ============================================ ייצוא -->
+        <div class="admin-pane" id="pane-export" hidden>
+            <div class="admin-card">
+                <h2 class="admin-card-title"><i class="fas fa-file-arrow-down"></i> ייצוא נתונים</h2>
+
+                <p class="admin-note">
+                    CSV נפתח ישירות באקסל, כולל עברית. JSON שומר את המבנה המלא
+                    ומתאים להעברה למערכת אחרת. כל ייצוא נרשם ביומן הפעולות.
+                </p>
+
+                <p class="admin-note">
+                    <strong>שום סוד אינו נכלל בייצוא:</strong> לא סיסמאות, לא
+                    טוקני הזמנה, לא טוקני איפוס ולא מפתחות Push. קובץ שיורד
+                    מהדפדפן ממשיך למקומות שהשרת לא שולט בהם, ואסור שאפשר יהיה
+                    להתחזות בעזרתו.
+                </p>
+
+                <div class="admin-tasks">
+                    <?php foreach ($datasets as $key => $dataset): ?>
+                    <div class="admin-task">
+                        <div class="admin-task-text">
+                            <strong><?php echo htmlspecialchars($dataset['title']); ?></strong>
+                            <span><?php echo htmlspecialchars($dataset['detail']); ?></span>
+                        </div>
+                        <div class="admin-export-buttons">
+                            <a class="btn-secondary"
+                               href="?export=<?php echo urlencode($key); ?>&amp;format=csv">CSV</a>
+                            <a class="btn-secondary"
+                               href="?export=<?php echo urlencode($key); ?>&amp;format=json">JSON</a>
+                        </div>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+
+            <div class="admin-card">
+                <h2 class="admin-card-title"><i class="fas fa-box-archive"></i> גיבוי מלא</h2>
+                <p class="admin-note">
+                    כל מערכי הנתונים בקובץ JSON אחד. מערך שהשאילתה שלו נכשלה
+                    נכלל כ-<code>null</code> ולא מושמט — גיבוי שנראה שלם אבל
+                    אינו, גרוע מגיבוי חלקי שמצהיר על עצמו.
+                </p>
+                <p class="admin-note">
+                    זה אינו תחליף לגיבוי מסד הנתונים: הוא אינו כולל את תמונות
+                    הקבלות שב-<code>uploads/</code>, ואי אפשר לשחזר ממנו את
+                    המערכת בלחיצה.
+                </p>
+                <div class="admin-actions-row">
+                    <a class="btn-primary" href="?export=full&amp;format=json">
+                        <i class="fas fa-download"></i> הורד גיבוי מלא
+                    </a>
+                </div>
+            </div>
+        </div><!-- pane-export -->
 
         <!-- ============================================= יומן -->
         <div class="admin-pane" id="pane-log" hidden>

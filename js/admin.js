@@ -469,6 +469,101 @@ window.onclick = function (event) {
 };
 
 // ============================================================
+// הזמנות
+// ============================================================
+
+let inviteFilter = 'pending';
+
+function setInviteFilter(value) {
+    inviteFilter = value;
+
+    document.querySelectorAll('#inviteFilters .admin-chip').forEach(chip => {
+        chip.classList.toggle('active', chip.dataset.filter === value);
+    });
+
+    filterInvitations();
+}
+
+function filterInvitations() {
+    const term  = document.getElementById('inviteSearch').value.trim().toLowerCase();
+    const cards = document.querySelectorAll('#invitationsList .admin-invite');
+    let visible = 0;
+
+    cards.forEach(card => {
+        const matchesFilter =
+            inviteFilter === 'all'   ? true :
+            inviteFilter === 'stale' ? card.dataset.stale === '1'
+                                     : card.dataset.status === inviteFilter;
+
+        const matchesTerm = term === '' || card.dataset.search.includes(term);
+        const show = matchesFilter && matchesTerm;
+
+        card.style.display = show ? '' : 'none';
+        if (show) visible++;
+    });
+
+    document.getElementById('noInvitations').style.display = visible === 0 ? '' : 'none';
+}
+
+/**
+ * מעתיק את קישור ההצטרפות.
+ *
+ * clipboard.writeText זמין רק בהקשר מאובטח, ובלעדיו לא קורה כלום
+ * והמנהל לא מבין למה. במקרה כזה הקישור מוצג ב-prompt כדי שאפשר
+ * יהיה לסמן ולהעתיק ידנית.
+ */
+async function copyInviteLink(button) {
+    const link = button.dataset.link;
+
+    try {
+        await navigator.clipboard.writeText(link);
+    } catch (error) {
+        prompt('העתק את הקישור:', link);
+        return;
+    }
+
+    const original = button.innerHTML;
+    button.innerHTML = '<i class="fas fa-check"></i> הועתק';
+
+    setTimeout(() => { button.innerHTML = original; }, 1500);
+}
+
+async function resendInvitation(invitationId) {
+    if (!confirm('לשלוח מחדש את מייל ההזמנה?')) {
+        return;
+    }
+
+    const data = await callAction('resendInvitation', { invitation_id: invitationId });
+    if (!data) return;
+
+    alert(data.message);
+}
+
+async function cancelInvitation(invitationId) {
+    if (!confirm('לבטל את ההזמנה?\n\nקישור ההצטרפות יפסיק לעבוד. אפשר תמיד להזמין מחדש.')) {
+        return;
+    }
+
+    const data = await callAction('cancelInvitation', { invitation_id: invitationId });
+    if (!data) return;
+
+    alert(data.message);
+    location.reload();
+}
+
+async function cancelStaleInvitations() {
+    if (!confirm('לבטל את כל ההזמנות שממתינות מעל 30 יום?\n\nהקישורים שלהן יפסיקו לעבוד.')) {
+        return;
+    }
+
+    const data = await callAction('cancelStaleInvitations', { days: 30 });
+    if (!data) return;
+
+    alert(data.message);
+    location.reload();
+}
+
+// ============================================================
 // תחזוקה ופיתוח
 // ============================================================
 
