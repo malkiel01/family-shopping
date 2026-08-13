@@ -163,18 +163,28 @@ switch ($action) {
         try {
             $pdo = getDBConnection();
             
-            // בדוק אם הטבלה קיימת, אם לא - צור אותה
+            // בדוק אם הטבלה קיימת, אם לא - צור אותה.
+            //
+            // המבנה כאן חייב להיות זהה לזה שב-db/migrate.php. הגרסה
+            // הקודמת יצרה טבלה מצומצמת, בלי priority/attempts ובלי
+            // המצבים 'completed' ו-'failed' - וה-cron נכשל עליה.
             $stmt = $pdo->prepare("
                 CREATE TABLE IF NOT EXISTS notification_queue (
                     id INT AUTO_INCREMENT PRIMARY KEY,
-                    user_id INT,
-                    type VARCHAR(50),
-                    data TEXT,
-                    status ENUM('pending', 'read', 'sent') DEFAULT 'pending',
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    processed_at TIMESTAMP NULL,
-                    INDEX idx_user_status (user_id, status),
-                    INDEX idx_created (created_at)
+                    user_id INT NULL,
+                    type VARCHAR(50) NOT NULL,
+                    data TEXT NULL,
+                    status ENUM('pending','read','sent','completed','failed')
+                           NOT NULL DEFAULT 'pending',
+                    priority TINYINT NOT NULL DEFAULT 5,
+                    attempts INT NOT NULL DEFAULT 0,
+                    last_attempt DATETIME NULL DEFAULT NULL,
+                    error_message VARCHAR(500) NULL DEFAULT NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    processed_at DATETIME NULL DEFAULT NULL,
+                    INDEX idx_queue_user (user_id, status),
+                    INDEX idx_queue_pending (status, processed_at, priority, id),
+                    INDEX idx_queue_created (created_at)
                 )
             ");
             $stmt->execute();

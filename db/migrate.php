@@ -504,6 +504,152 @@ step(
     }
 );
 
+// ============================================================
+echo "\nמיגרציה 009 - תור ההתראות\n";
+echo str_repeat('=', 60) . "\n";
+
+step(
+    'טבלה notification_queue',
+    function () use ($pdo, $dbName) {
+        return !tableExists($pdo, $dbName, 'notification_queue');
+    },
+    function () use ($pdo) {
+        // הטבלה מעולם לא נוצרה כאן, אלא רק דרך CREATE TABLE מאולתר
+        // בתוך api/simple-notifications.php - ורק במסלול "שלח בדיקה".
+        // בהתקנה נקייה שלא לחצו בה על הכפתור הזה, כל queueNotification
+        // נכשל בשקט (הוא בולע את החריגה), וההתראות פשוט לא הגיעו.
+        $pdo->exec("
+            CREATE TABLE `notification_queue` (
+                `id`            INT AUTO_INCREMENT PRIMARY KEY,
+                `user_id`       INT          NULL,
+                `type`          VARCHAR(50)  NOT NULL,
+                `data`          TEXT         NULL,
+                `status`        ENUM('pending','read','sent','completed','failed')
+                                NOT NULL DEFAULT 'pending',
+                `priority`      TINYINT      NOT NULL DEFAULT 5,
+                `attempts`      INT          NOT NULL DEFAULT 0,
+                `last_attempt`  DATETIME     NULL DEFAULT NULL,
+                `error_message` VARCHAR(500) NULL DEFAULT NULL,
+                `created_at`    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                `processed_at`  DATETIME     NULL DEFAULT NULL,
+                INDEX `idx_queue_user`    (`user_id`, `status`),
+                INDEX `idx_queue_pending` (`status`, `processed_at`, `priority`, `id`),
+                INDEX `idx_queue_created` (`created_at`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+    }
+);
+
+// טבלה שנוצרה על ידי הגרסה המאולתרת חסרה את העמודות שה-cron
+// מעדכן, ולכן כל הרצה שלו נכשלת על "unknown column".
+$queueColumns = [
+    'priority'      => "ADD COLUMN `priority` TINYINT NOT NULL DEFAULT 5",
+    'attempts'      => "ADD COLUMN `attempts` INT NOT NULL DEFAULT 0",
+    'last_attempt'  => "ADD COLUMN `last_attempt` DATETIME NULL DEFAULT NULL",
+    'error_message' => "ADD COLUMN `error_message` VARCHAR(500) NULL DEFAULT NULL",
+    'processed_at'  => "ADD COLUMN `processed_at` DATETIME NULL DEFAULT NULL",
+];
+
+foreach ($queueColumns as $column => $sql) {
+    step(
+        "notification_queue.$column",
+        function () use ($pdo, $dbName, $column) {
+            return tableExists($pdo, $dbName, 'notification_queue')
+                && !columnExists($pdo, $dbName, 'notification_queue', $column);
+        },
+        function () use ($pdo, $sql) {
+            $pdo->exec("ALTER TABLE `notification_queue` $sql");
+        }
+    );
+}
+
+step(
+    "מצבי 'completed' ו-'failed' בתור",
+    function () use ($pdo, $dbName) {
+        if (!columnExists($pdo, $dbName, 'notification_queue', 'status')) {
+            return false;
+        }
+
+        $stmt = $pdo->prepare("
+            SELECT COLUMN_TYPE FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'notification_queue'
+              AND COLUMN_NAME = 'status'
+        ");
+        $stmt->execute([$dbName]);
+        $type = (string)$stmt->fetchColumn();
+
+        return $type !== '' && strpos($type, "'completed'") === false;
+    },
+    function () use ($pdo) {
+        // ה-cron מסמן שורה שנשלחה כ-'completed' וכישלון כ-'failed'.
+        // ב-enum הישן שני הערכים לא היו קיימים, ולכן העדכון נדחה
+        // וההתראה נשארה 'pending' לנצח - ונשלחה שוב ושוב.
+        $pdo->exec("
+            ALTER TABLE `notification_queue`
+            MODIFY COLUMN `status`
+                ENUM('pending','read','sent','completed','failed')
+                NOT NULL DEFAULT 'pending'
+        ");
+    }
+);
+
+// ============================================================
+echo "\nמיגרציה 010 - מנויי Push\n";
+echo str_repeat('=', 60) . "\n";
+
+step(
+    'טבלה push_subscriptions',
+    function () use ($pdo, $dbName) {
+        return !tableExists($pdo, $dbName, 'push_subscriptions');
+    },
+    function () use ($pdo) {
+        // המנוי הוא מה שמאפשר לדחוף התראה לדפדפן סגור. בלי הטבלה
+        // api/save-push-subscription.php מחזיר שגיאה, והמשתמש רואה
+        // הרשמה שנכשלת בלי סיבה נראית לעין.
+        //
+        // endpoint מוגבל ל-500 תווים כדי שיוכל להיכנס למפתח ייחודי
+        // יחד עם user_id, ובכל זאת יכיל כתובות ארוכות של FCM.
+        $pdo->exec("
+            CREATE TABLE `push_subscriptions` (
+                `id`          INT AUTO_INCREMENT PRIMARY KEY,
+                `user_id`     INT          NOT NULL,
+                `endpoint`    VARCHAR(500) NOT NULL,
+                `p256dh`      VARCHAR(255) NULL DEFAULT NULL,
+                `auth`        VARCHAR(255) NULL DEFAULT NULL,
+                `user_agent`  VARCHAR(255) NULL DEFAULT NULL,
+                `device_type` VARCHAR(50)  NULL DEFAULT NULL,
+                `is_active`   TINYINT(1)   NOT NULL DEFAULT 1,
+                `last_used`   DATETIME     NULL DEFAULT NULL,
+                `created_at`  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                `updated_at`  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
+                              ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY `uniq_user_endpoint` (`user_id`, `endpoint`(255)),
+                INDEX `idx_push_active` (`user_id`, `is_active`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+    }
+);
+
+$pushColumns = [
+    'is_active'   => "ADD COLUMN `is_active` TINYINT(1) NOT NULL DEFAULT 1",
+    'last_used'   => "ADD COLUMN `last_used` DATETIME NULL DEFAULT NULL",
+    'device_type' => "ADD COLUMN `device_type` VARCHAR(50) NULL DEFAULT NULL",
+    'user_agent'  => "ADD COLUMN `user_agent` VARCHAR(255) NULL DEFAULT NULL",
+];
+
+foreach ($pushColumns as $column => $sql) {
+    step(
+        "push_subscriptions.$column",
+        function () use ($pdo, $dbName, $column) {
+            return tableExists($pdo, $dbName, 'push_subscriptions')
+                && !columnExists($pdo, $dbName, 'push_subscriptions', $column);
+        },
+        function () use ($pdo, $sql) {
+            $pdo->exec("ALTER TABLE `push_subscriptions` $sql");
+        }
+    );
+}
+
 echo str_repeat('=', 60) . "\n";
 echo "בוצעו: $applied | דילוגים: $skipped | כשלונות: $failed\n";
 
