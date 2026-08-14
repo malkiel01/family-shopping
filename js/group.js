@@ -403,14 +403,78 @@ function deleteItem(itemId) {
 // התחשבנות
 // ============================================================
 
-function markSettled(fromMemberId, toMemberId, amount) {
-    if (!confirm(`לרשום שההעברה של ₪${amount} בוצעה?`)) return;
+/**
+ * שני המסכים חולקים את אותו זיכרון: מה הסכום המלא של ההעברה
+ * שנפתחה. הוא נדרש לכפתור "הכל" ולתצוגת "מתוך X".
+ */
+let openTransferAmount = 0;
 
-    callAndReload('addSettlement', {
-        from_member_id: fromMemberId,
-        to_member_id: toMemberId,
-        amount: amount
+function formatAmount(value) {
+    return '₪' + Number(value).toFixed(2);
+}
+
+// --- רישום תשלום, מלא או חלקי ---
+
+function openSettleModal(fromMemberId, toMemberId, amount, partiesLabel) {
+    openTransferAmount = Number(amount);
+
+    document.getElementById('settleFrom').value = fromMemberId;
+    document.getElementById('settleTo').value   = toMemberId;
+    document.getElementById('settleParties').textContent  = partiesLabel;
+    document.getElementById('settleFullAmount').textContent = formatAmount(amount);
+    document.getElementById('settleAmount').value = Number(amount).toFixed(2);
+    document.getElementById('settleNote').value   = '';
+
+    document.getElementById('settleModal').classList.add('is-open');
+}
+
+function closeSettleModal() {
+    document.getElementById('settleModal').classList.remove('is-open');
+}
+
+function settleFillFull() {
+    document.getElementById('settleAmount').value = openTransferAmount.toFixed(2);
+}
+
+// --- העברת חוב ---
+
+function openDebtTransferModal(fromMemberId, amount, fromName) {
+    openTransferAmount = Number(amount);
+
+    document.getElementById('debtFrom').value = fromMemberId;
+    document.getElementById('debtFromName').textContent = 'החוב של ' + fromName;
+    document.getElementById('debtFullAmount').textContent = formatAmount(amount);
+    document.getElementById('debtAmount').value = Number(amount).toFixed(2);
+    document.getElementById('debtNote').value   = '';
+
+    // מי שהחוב שלו אינו יכול לקבל אותו מעצמו
+    const select = document.getElementById('debtTo');
+    let available = 0;
+
+    Array.from(select.options).forEach(option => {
+        const isSelf = (Number(option.value) === Number(fromMemberId));
+        option.hidden   = isSelf;
+        option.disabled = isSelf;
+        if (!isSelf) available++;
     });
+
+    if (available === 0) {
+        alert('אין משתתף אחר שיכול לקחת על עצמו את החוב');
+        return;
+    }
+
+    const first = Array.from(select.options).find(option => !option.disabled);
+    if (first) select.value = first.value;
+
+    document.getElementById('debtTransferModal').classList.add('is-open');
+}
+
+function closeDebtTransferModal() {
+    document.getElementById('debtTransferModal').classList.remove('is-open');
+}
+
+function debtFillFull() {
+    document.getElementById('debtAmount').value = openTransferAmount.toFixed(2);
 }
 
 function deleteSettlement(settlementId) {
@@ -492,6 +556,62 @@ document.addEventListener('DOMContentLoaded', function () {
             reloadOnInviteClose = true;
             const url = new URL(data.invitation_link);
             showInviteLink(url.searchParams.get('token'), data.message);
+        });
+    }
+
+    const settleForm = document.getElementById('settleForm');
+    if (settleForm) {
+        settleForm.addEventListener('submit', function (event) {
+            event.preventDefault();
+
+            const amount = parseFloat(document.getElementById('settleAmount').value);
+            if (!(amount > 0)) {
+                alert('הסכום חייב להיות חיובי');
+                return;
+            }
+
+            // סכום גדול מהחוב אינו שגיאה - אפשר להחזיר ביתר - אבל
+            // הוא כמעט תמיד טעות הקלדה, ולכן מבקש אישור
+            if (amount > openTransferAmount + 0.01
+                && !confirm(`הסכום גדול מהחוב (${formatAmount(openTransferAmount)}). להמשיך?`)) {
+                return;
+            }
+
+            callAndReload('addSettlement', {
+                from_member_id: document.getElementById('settleFrom').value,
+                to_member_id: document.getElementById('settleTo').value,
+                amount: amount,
+                note: document.getElementById('settleNote').value,
+                type: 'payment'
+            });
+        });
+    }
+
+    const debtTransferForm = document.getElementById('debtTransferForm');
+    if (debtTransferForm) {
+        debtTransferForm.addEventListener('submit', function (event) {
+            event.preventDefault();
+
+            const amount = parseFloat(document.getElementById('debtAmount').value);
+            if (!(amount > 0)) {
+                alert('הסכום חייב להיות חיובי');
+                return;
+            }
+
+            const select = document.getElementById('debtTo');
+            const taker  = select.options[select.selectedIndex].textContent.trim();
+
+            if (!confirm(`להעביר חוב של ${formatAmount(amount)} ל${taker}?\n\nלא עובר כסף — החוב עצמו עובר.`)) {
+                return;
+            }
+
+            callAndReload('addSettlement', {
+                from_member_id: document.getElementById('debtFrom').value,
+                to_member_id: select.value,
+                amount: amount,
+                note: document.getElementById('debtNote').value,
+                type: 'transfer'
+            });
         });
     }
 

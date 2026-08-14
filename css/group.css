@@ -1929,3 +1929,95 @@ body {
 .members-grid {
     min-width: 0;
 }
+
+/* ============================================================
+   תשלום חלקי והעברת חוב
+   ============================================================ */
+
+/* שני כפתורים במקום אחד. בטלפון הם יורדים לשורה נפרדת מתחת
+   לסכום, כדי שלא ידחקו אותו החוצה מהכרטיס. */
+.transfer-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.btn-transfer-debt {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: #eef0fb;
+    color: #4a55c7;
+    border: none;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.btn-transfer-debt:hover {
+    background: #e0e4f8;
+}
+
+@media (max-width: 480px) {
+    .transfer-actions {
+        width: 100%;
+    }
+
+    .transfer-actions button {
+        flex: 1;
+        justify-content: center;
+    }
+}
+
+/* --- העברת חוב בהיסטוריה ---
+   הפס בצד מבדיל בלי להוסיף עוד צבע לשורה שכבר עמוסה */
+.settlement-row.is-transfer {
+    border-inline-start: 3px solid #7b86e0;
+    padding-inline-start: 10px;
+}
+
+.settlement-tag {
+    display: inline-block;
+    margin-inline-start: 6px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #eef0fb;
+    color: #4a55c7;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.settlement-row.is-transfer .settlement-amount {
+    color: #4a55c7;
+}
+
+/* --- שורת ההקשר במודל --- */
+.modal-context {
+    margin: 0 0 14px;
+    padding: 8px 12px;
+    background: #f1f2f7;
+    border-radius: 9px;
+    font-weight: 600;
+    color: #4a4f63;
+    font-size: 14px;
+}
+
+/* קישור בתוך טקסט עזרה, למשל "הכל" שממלא את הסכום המלא */
+.link-button {
+    background: none;
+    border: none;
+    padding: 0;
+    font-family: inherit;
+    font-size: inherit;
+    font-weight: 600;
+    color: #667eea;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.link-button:hover {
+    color: #4a55c7;
+}

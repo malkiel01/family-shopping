@@ -109,6 +109,31 @@ echo "\n9. התחשבנות חלקית\n";
 $r = calculateGroupBalance($m5,$p5,[['from_member_id'=>2,'to_member_id'=>1,'amount'=>40]]);
 check('נותרו 60', $r['transfers'][0]['amount'], 60);
 
+// ---- 9ב. debt transfer: the debt moves to a third party, nothing is created
+// מבחינת המאזן זו אותה פעולה כמו תשלום, ובדיוק בגלל זה שווה
+// לקבע את ההתנהגות: החוב עובר, הזכות לא זזה, והסכום נשמר.
+echo "\n9ב. העברת חוב למשתתף שלישי\n";
+$m9 = [member(1,'א','percentage',34), member(2,'ב','percentage',33), member(3,'ג','percentage',33)];
+$p9 = [['id'=>1,'member_id'=>1,'amount'=>300,'excluded_ids'=>[]]];
+
+$r = calculateGroupBalance($m9,$p9);
+check('לפני: ב חייב 99', round(abs(byNick($r,'ב')['openBalance']),2), 99);
+check('לפני: ג חייב 99', round(abs(byNick($r,'ג')['openBalance']),2), 99);
+
+// ב מעביר את החוב שלו לג: נרשם כהתחשבנות מ-ב אל ג
+$r = calculateGroupBalance($m9,$p9,[['from_member_id'=>2,'to_member_id'=>3,'amount'=>99]]);
+check('אחרי: ב מאוזן', round(byNick($r,'ב')['openBalance'],2), 0);
+check('אחרי: ג חייב 198', round(abs(byNick($r,'ג')['openBalance']),2), 198);
+check('אחרי: זכותו של א לא זזה', round(byNick($r,'א')['openBalance'],2), 198);
+check('אחרי: נותרה העברה אחת', count($r['transfers']), 1);
+check('אחרי: והיא של ג', $r['transfers'][0]['from_id'], 3);
+
+// ---- 9ג. partial debt transfer
+echo "\n9ג. העברת חוב חלקית\n";
+$r = calculateGroupBalance($m9,$p9,[['from_member_id'=>2,'to_member_id'=>3,'amount'=>50]]);
+check('ב נשאר עם 49', round(abs(byNick($r,'ב')['openBalance']),2), 49);
+check('ג מחזיק 149', round(abs(byNick($r,'ג')['openBalance']),2), 149);
+
 // ---- 10. everyone excluded from a purchase -> unallocated, no crash
 echo "\n10. כולם מוחרגים מקנייה\n";
 $r = calculateGroupBalance($m5,[['id'=>1,'member_id'=>1,'amount'=>100,'excluded_ids'=>[1,2]]]);

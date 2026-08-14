@@ -454,3 +454,126 @@ function renderSplitSettingsModal($currentMode, $shareRate) {
     </div>
     <?php
 }
+
+/**
+ * רישום תשלום, מלא או חלקי.
+ *
+ * עד היום הכפתור "שולם" רשם תמיד את הסכום המלא, וזה לא תאם את
+ * המציאות: מי שהחזיר חצי היה צריך לחכות עד שיחזיר את השאר, או
+ * שמישהו רשם סכום מלא שלא הועבר. השדה נפתח עם הסכום המלא, כי
+ * זה עדיין המקרה הנפוץ.
+ */
+function renderSettleModal() {
+    ?>
+    <div id="settleModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>רישום תשלום</h2>
+                <span class="close" onclick="closeSettleModal()">&times;</span>
+            </div>
+            <form id="settleForm">
+                <input type="hidden" id="settleFrom">
+                <input type="hidden" id="settleTo">
+                <p class="modal-context" id="settleParties"></p>
+
+                <div class="form-group">
+                    <label for="settleAmount">כמה הועבר?</label>
+                    <div class="input-with-suffix">
+                        <input type="number" id="settleAmount" step="0.01" min="0.01" required>
+                        <span>₪</span>
+                    </div>
+                    <small class="form-hint">
+                        מתוך <span id="settleFullAmount"></span>.
+                        <button type="button" class="link-button" onclick="settleFillFull()">
+                            הכל
+                        </button>
+                    </small>
+                </div>
+
+                <div class="form-group">
+                    <label for="settleNote">הערה (לא חובה):</label>
+                    <input type="text" id="settleNote" maxlength="255"
+                           placeholder="למשל: ביט, מזומן, חלק ראשון">
+                </div>
+
+                <div class="modal-actions">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-check"></i> רשום תשלום
+                    </button>
+                    <button type="button" class="btn-secondary" onclick="closeSettleModal()">
+                        ביטול
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <?php
+}
+
+/**
+ * העברת חוב למשתתף אחר.
+ *
+ * מבחינת המאזן זו אותה פעולה כמו תשלום - החייב מזוכה והמקבל
+ * מחויב - ולכן היא נרשמת באותה טבלה, עם סוג אחר. ההבחנה חשובה
+ * בהיסטוריה: בלעדיה כתוב "א' שילם לג'" גם כשלא עבר שקל.
+ */
+function renderDebtTransferModal($members) {
+    ?>
+    <div id="debtTransferModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>העברת חוב</h2>
+                <span class="close" onclick="closeDebtTransferModal()">&times;</span>
+            </div>
+            <form id="debtTransferForm">
+                <input type="hidden" id="debtFrom">
+                <p class="modal-context" id="debtFromName"></p>
+
+                <div class="form-group">
+                    <label for="debtTo">מי לוקח על עצמו את החוב?</label>
+                    <select id="debtTo" required>
+                        <?php foreach ($members as $member): ?>
+                        <option value="<?php echo (int)$member['id']; ?>">
+                            <?php echo htmlspecialchars($member['nickname']); ?>
+                        </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="debtAmount">איזה סכום?</label>
+                    <div class="input-with-suffix">
+                        <input type="number" id="debtAmount" step="0.01" min="0.01" required>
+                        <span>₪</span>
+                    </div>
+                    <small class="form-hint">
+                        מתוך <span id="debtFullAmount"></span>.
+                        <button type="button" class="link-button" onclick="debtFillFull()">
+                            הכל
+                        </button>
+                    </small>
+                </div>
+
+                <div class="form-group">
+                    <label for="debtNote">הערה (לא חובה):</label>
+                    <input type="text" id="debtNote" maxlength="255"
+                           placeholder="למשל: סוכם ביניהם">
+                </div>
+
+                <p class="form-hint">
+                    לא עובר כסף. החוב פשוט עובר למי שתבחר, ושני הצדדים יקבלו התראה.
+                </p>
+
+                <div class="modal-actions">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-right-left"></i> העבר את החוב
+                    </button>
+                    <button type="button" class="btn-secondary" onclick="closeDebtTransferModal()">
+                        ביטול
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <?php
+}

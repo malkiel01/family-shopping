@@ -516,6 +516,20 @@ function migrationCatalog(PDO $pdo, $dbName) {
 
     $catalog[] = ['id' => '010', 'title' => 'מנויי Push', 'steps' => $pushSteps];
 
+    // --------------------------------------------------------
+    // העברת חוב ותשלום הן אותה פעולה מבחינת המאזן: החייב מזוכה
+    // והמקבל מחויב. ההבדל הוא במשמעות, ובלי לתעד אותו ההיסטוריה
+    // הייתה מציגה "א' שילם לג'" גם כשלא עבר שקל.
+    $catalog[] = [
+        'id'    => '011',
+        'title' => 'סוג התחשבנות',
+        'steps' => [
+            stepAddColumn($pdo, $dbName, 'settlements', 'type',
+                "`type` ENUM('payment','transfer') NOT NULL DEFAULT 'payment' "
+                . "COMMENT 'payment = הועבר כסף; transfer = החוב עבר למשתתף אחר'"),
+        ],
+    ];
+
     return $catalog;
 }
 

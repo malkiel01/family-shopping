@@ -40,6 +40,36 @@ function eventFeaturesReady(PDO $pdo) {
 }
 
 /**
+ * האם עמודת סוג ההתחשבנות קיימת (מיגרציה 011).
+ *
+ * בלעדיה העברת חוב עדיין עובדת - היא נרשמת כהתחשבנות רגילה,
+ * והמאזן יוצא נכון - אבל ההיסטוריה לא יודעת להבחין בין השתיים.
+ * זו סיבה להסתיר את הכפתור, לא לשבור את המסך.
+ */
+function settlementTypesReady(PDO $pdo) {
+    static $ready = null;
+
+    if ($ready !== null) {
+        return $ready;
+    }
+
+    try {
+        $stmt = $pdo->prepare("
+            SELECT COUNT(*) FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = 'settlements' AND COLUMN_NAME = 'type'
+        ");
+        $stmt->execute();
+        $ready = ((int)$stmt->fetchColumn() === 1);
+    } catch (Exception $e) {
+        error_log('Settlement type check failed: ' . $e->getMessage());
+        $ready = false;
+    }
+
+    return $ready;
+}
+
+/**
  * באנר שמוצג כשהמיגרציה עוד לא הורצה.
  */
 function renderMigrationNotice() {
