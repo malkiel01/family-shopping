@@ -150,6 +150,10 @@ function calculateGroupBalance(array $members, array $purchases, array $settleme
 
     $unallocated = 0.0;
 
+    // מי חייב למי ישירות, לפני קיזוזים. נצבר קנייה-קנייה: כל
+    // משתתף בקנייה חייב את חלקו למי שקנה אותה.
+    $owes = [];
+
     // --- מעבר קנייה-קנייה ---
     foreach ($purchases as $purchase) {
         $amount = (float)$purchase['amount'];
@@ -182,6 +186,12 @@ function calculateGroupBalance(array $members, array $purchases, array $settleme
                 $share = (float)$member['participation_value'] * ($amount / $totalAmount);
                 $shouldPay[$memberId] += $share;
                 $fixedCovered += $share;
+
+                // מי שלא קנה חייב את חלקו למי שקנה. זה החוב האמיתי
+                // בין שני האנשים, להבדיל מהמאזן הכולל.
+                if ($memberId !== $payer) {
+                    $owes[$memberId][$payer] = ($owes[$memberId][$payer] ?? 0.0) + $share;
+                }
             }
         }
 
@@ -214,8 +224,13 @@ function calculateGroupBalance(array $members, array $purchases, array $settleme
             if (isset($excluded[$memberId]) || $member['participation_type'] !== 'percentage') {
                 continue;
             }
-            $shouldPay[$memberId] += $distributable
+            $share = $distributable
                 * ((float)$member['participation_value'] / $includedWeight);
+            $shouldPay[$memberId] += $share;
+
+            if ($memberId !== $payer) {
+                $owes[$memberId][$payer] = ($owes[$memberId][$payer] ?? 0.0) + $share;
+            }
         }
     }
 
@@ -231,6 +246,11 @@ function calculateGroupBalance(array $members, array $purchases, array $settleme
 
         $settledOut[$from] = ($settledOut[$from] ?? 0.0) + $amount;
         $settledIn[$to]    = ($settledIn[$to] ?? 0.0) + $amount;
+
+        // תשלום סוגר קודם כל את החוב שבין השניים האלה. בלי זה
+        // אדם ששילם למי שהוא חייב לו היה יכול לראות מיד חוב חדש
+        // לאותו אדם, כי הזיווג חושב מחדש מאפס.
+        $owes[$from][$to] = ($owes[$from][$to] ?? 0.0) - $amount;
     }
 
     // --- סיכום לכל חבר ---
@@ -257,17 +277,86 @@ function calculateGroupBalance(array $members, array $purchases, array $settleme
         ];
     }
 
-    $result['transfers']  = calculateTransfers($result['calculations']);
+    $result['transfers']  = calculateTransfers($result['calculations'], $owes);
     $result['isBalanced'] = count($result['transfers']) === 0;
 
     return $result;
 }
 
 /**
- * מייצר את רשימת ההעברות המינימלית לאיזון החשבון.
- * חמדני: מי שהכי חייב משלם למי שהכי מגיע לו.
+ * החוב הנקי בין כל שני אנשים, אחרי קיזוז הכיוון ההפוך.
+ *
+ * @param array $owes מטריצת חוב גולמית: owes[חייב][נושה]
+ * @return array רשימת ['from','to','amount'], מהגדול לקטן
  */
-function calculateTransfers(array $calculations) {
+function netPairwiseDebts(array $owes) {
+    $pairs = [];
+
+    foreach ($owes as $debtor => $creditors) {
+        foreach ($creditors as $creditor => $amount) {
+            // כל זוג מחושב פעם אחת, משני הכיוונים יחד
+            if ($debtor >= $creditor) {
+                continue;
+            }
+
+            $net = $amount - ($owes[$creditor][$debtor] ?? 0.0);
+
+            if (abs($net) < 0.01) {
+                continue;
+            }
+
+            $pairs[] = $net > 0
+                ? ['from' => (int)$debtor,   'to' => (int)$creditor, 'amount' => $net]
+                : ['from' => (int)$creditor, 'to' => (int)$debtor,   'amount' => -$net];
+        }
+    }
+
+    // גם הכיוון ההפוך, למקרה שהוא לא נצבר בכלל בכיוון הראשון
+    foreach ($owes as $debtor => $creditors) {
+        foreach ($creditors as $creditor => $amount) {
+            if ($debtor <= $creditor || isset($owes[$creditor][$debtor])) {
+                continue;
+            }
+
+            if (abs($amount) < 0.01) {
+                continue;
+            }
+
+            $pairs[] = $amount > 0
+                ? ['from' => (int)$debtor,   'to' => (int)$creditor, 'amount' => $amount]
+                : ['from' => (int)$creditor, 'to' => (int)$debtor,   'amount' => -$amount];
+        }
+    }
+
+    usort($pairs, function ($a, $b) {
+        return $b['amount'] <=> $a['amount'];
+    });
+
+    return $pairs;
+}
+
+/**
+ * מייצר את רשימת ההעברות לאיזון החשבון.
+ *
+ * שני שלבים, והסדר ביניהם הוא כל העניין:
+ *
+ *   1. **חוב אמיתי בין שני אנשים.** מי שהשתתף בקנייה חייב את חלקו
+ *      למי שקנה אותה. אלה החובות שאנשים מזהים - "אני חייב לו כי
+ *      הוא קנה את הבשר" - ולכן הם נסגרים ראשונים.
+ *
+ *   2. **חמדני על מה שנשאר.** מי שהכי חייב לזה שהכי מגיע לו, כדי
+ *      למזער את מספר ההעברות.
+ *
+ *   השלב הראשון נוסף אחרי באג אמיתי: משתתף שילם למי שהיה חייב לו,
+ *   והמסך הציג לו מיד חוב **גדול יותר** לאותו אדם. הסכום הכולל היה
+ *   נכון, אבל הזיווג חושב מאפס והצמיד אותו לנושה אחר. מבחינת
+ *   המשתמש זה נראה כאילו התשלום יצר חוב חדש, וזה הורס את האמון
+ *   במספרים גם כשהם מדויקים.
+ *
+ * @param array $calculations תוצאת calculateGroupBalance
+ * @param array $owes         מטריצת החוב הישיר: owes[חייב][נושה]
+ */
+function calculateTransfers(array $calculations, array $owes = []) {
     $creditors = [];
     $debtors   = [];
 
@@ -281,10 +370,59 @@ function calculateTransfers(array $calculations) {
         }
     }
 
+    $transfers = [];
+
+    // --- שלב 1: חובות ישירים ---
+    if ($owes) {
+        $creditorIndexById = [];
+        foreach ($creditors as $index => $creditor) {
+            $creditorIndexById[(int)$creditor['member']['id']] = $index;
+        }
+
+        $debtorIndexById = [];
+        foreach ($debtors as $index => $debtor) {
+            $debtorIndexById[(int)$debtor['member']['id']] = $index;
+        }
+
+        foreach (netPairwiseDebts($owes) as $pair) {
+            if (!isset($debtorIndexById[$pair['from']], $creditorIndexById[$pair['to']])) {
+                continue;
+            }
+
+            $d = $debtorIndexById[$pair['from']];
+            $c = $creditorIndexById[$pair['to']];
+
+            $amount = min($pair['amount'], $debtors[$d]['balance'], $creditors[$c]['balance']);
+
+            if ($amount <= 0.01) {
+                continue;
+            }
+
+            $transfers[] = [
+                'from'    => $debtors[$d]['member']['nickname'],
+                'to'      => $creditors[$c]['member']['nickname'],
+                'from_id' => (int)$debtors[$d]['member']['id'],
+                'to_id'   => (int)$creditors[$c]['member']['id'],
+                'amount'  => round($amount, 2),
+            ];
+
+            $debtors[$d]['balance']   -= $amount;
+            $creditors[$c]['balance'] -= $amount;
+        }
+
+        // מי שנסגר בשלב הראשון יוצא מהחישוב החמדני
+        $creditors = array_values(array_filter($creditors, function ($creditor) {
+            return $creditor['balance'] > 0.01;
+        }));
+        $debtors = array_values(array_filter($debtors, function ($debtor) {
+            return $debtor['balance'] > 0.01;
+        }));
+    }
+
+    // --- שלב 2: חמדני על היתרה ---
     usort($creditors, function ($a, $b) { return $b['balance'] <=> $a['balance']; });
     usort($debtors,   function ($a, $b) { return $b['balance'] <=> $a['balance']; });
 
-    $transfers     = [];
     $creditorIndex = 0;
     $debtorIndex   = 0;
 
@@ -312,7 +450,31 @@ function calculateTransfers(array $calculations) {
         }
     }
 
-    return $transfers;
+    return mergeTransfers($transfers);
+}
+
+/**
+ * מאחד העברות בין אותם שני אנשים לשורה אחת.
+ *
+ * שני השלבים יכולים לייצר שתי שורות לאותו זוג - חלק מהחוב נסגר
+ * כחוב ישיר והשארית בשלב החמדני. שתי שורות זהות על המסך נראות
+ * כמו תקלה, וגם מזמינות תשלום כפול.
+ */
+function mergeTransfers(array $transfers) {
+    $merged = [];
+
+    foreach ($transfers as $transfer) {
+        $key = $transfer['from_id'] . '>' . $transfer['to_id'];
+
+        if (isset($merged[$key])) {
+            $merged[$key]['amount'] = round($merged[$key]['amount'] + $transfer['amount'], 2);
+            continue;
+        }
+
+        $merged[$key] = $transfer;
+    }
+
+    return array_values($merged);
 }
 
 /**
