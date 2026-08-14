@@ -22,6 +22,7 @@ require_once 'includes/admin.php';
 require_once 'includes/admin_system.php';
 require_once 'includes/admin_invitations.php';
 require_once 'includes/admin_export.php';
+require_once 'includes/admin_deploy.php';
 
 $pdo     = getDBConnection();
 $user_id = $_SESSION['user_id'];
@@ -124,6 +125,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
         case 'cancelStaleInvitations':
             $respond(adminCancelStaleInvitations($pdo, $user_id, intval($_POST['days'] ?? 30)));
+
+        case 'deploy':
+            $result = runDeploy($pdo, $user_id);
+            echo json_encode([
+                'success' => $result['ok'],
+                'message' => $result['message'],
+                'log'     => $result['log'],
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
     }
 
     echo json_encode(['success' => false, 'message' => 'פעולה לא מוכרת'], JSON_UNESCAPED_UNICODE);
@@ -143,6 +153,7 @@ $tasks       = maintenanceTasks();
 $invitations = adminListInvitations($pdo);
 $inviteCount = adminInvitationCounts($pdo);
 $datasets    = exportDatasets();
+$deploy      = deployStatus();
 
 /** כמה בדיקות תקינות אינן במצב תקין */
 $healthIssues = count(array_filter($health, function ($check) {
@@ -769,6 +780,41 @@ function adminMoney($value) {
 
         <!-- ================================== תחזוקה ופיתוח -->
         <div class="admin-pane" id="pane-maintenance" hidden>
+            <div class="admin-card">
+                <h2 class="admin-card-title">
+                    <i class="fas fa-cloud-arrow-down"></i> עדכון מגיטהאב
+                </h2>
+
+                <?php if (!$deploy['available']): ?>
+                    <p class="admin-note"><?php echo htmlspecialchars($deploy['reason']); ?></p>
+                    <p class="admin-note">
+                        העדכון ימשיך לדרוש <code>git pull</code> מהטרמינל של cPanel.
+                    </p>
+                <?php else: ?>
+                    <p class="admin-note">
+                        מושך את הקוד מגיטהאב ומריץ מיגרציות ממתינות — בלי טרמינל.
+                        משיכה שדורשת מיזוג תידחה ותדווח, כדי שלא תידרס עבודה
+                        שקיימת רק בשרת.
+                    </p>
+
+                    <dl class="admin-info">
+                        <dt>בשרת</dt>
+                        <dd><?php echo htmlspecialchars($deploy['head']); ?></dd>
+                        <dt>ענף</dt>
+                        <dd><?php echo htmlspecialchars($deploy['branch']); ?></dd>
+                    </dl>
+
+                    <div class="admin-actions-row">
+                        <button class="btn-primary" id="deployBtn" onclick="runDeploy()">
+                            <i class="fas fa-cloud-arrow-down"></i> עדכן מגיטהאב
+                        </button>
+                        <span class="admin-run-status" id="deployStatus"></span>
+                    </div>
+
+                    <div id="deployOutput"></div>
+                <?php endif; ?>
+            </div>
+
             <div class="admin-card">
                 <h2 class="admin-card-title">
                     <i class="fas fa-database"></i> מיגרציות
