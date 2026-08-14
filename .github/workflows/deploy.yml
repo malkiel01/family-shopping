@@ -1,14 +1,20 @@
 name: Deploy to production
 
-# פריסה אוטומטית git -> השרת. רצה על כל push ל-main, וגם ידנית
-# מלשונית Actions. מעלה קוד בלבד: .env, uploads/ ו-vendor/ מוחרגים,
-# ולכן הקבלות, הסודות והתלויות שבשרת לעולם אינם נדרסים.
+# פריסה אוטומטית git -> השרת, דרך FTPS. רצה על כל push ל-main,
+# וגם ידנית מלשונית Actions.
 #
-# rsync רץ בלי --delete בכוונה. קובץ שנמחק מהריפו יישאר בשרת, וזה
-# המחיר של הבטחה חשובה יותר: פריסה לא תמחק דבר שהיא לא מכירה.
+# למה FTP ולא SSH: cPanel של האחסון הזה מסרב לייצר מפתח SSH בלי
+# סיסמה, ומפתח עם סיסמה חסר תועלת בפריסה אוטומטית - אין מי
+# שיקליד אותה. הסרת הסיסמה דורשת טרמינל, שאינו זמין. FTPS עוקף
+# את זה לגמרי: שם משתמש וסיסמה, שאפשר להפיק מהדפדפן.
 #
-# אחרי העלאת הקוד רצה המיגרציה. היא אידמפוטנטית, ולכן הרצה בכל
-# פריסה אינה מזיקה - היא פשוט מדלגת על מה שכבר בוצע.
+# מעלה קוד בלבד: .env ו-uploads/ מוחרגים, ולכן הסודות והקבלות
+# שבשרת לעולם אינם נדרסים. אין מחיקה - קובץ שנמחק מהריפו יישאר
+# בשרת. זה המחיר של ההבטחה שפריסה לא מוחקת דבר שהיא לא מכירה.
+#
+# המיגרציות אינן רצות כאן, כי FTP מעביר קבצים ואינו מריץ פקודות.
+# אחרי הפריסה יש להריץ אותן פעם אחת מאזור "תחזוקה ופיתוח"
+# שבממשק הניהול - כפתור אחד, ואידמפוטנטי.
 
 on:
   push:
@@ -56,32 +62,30 @@ jobs:
             php "$t"
           done
 
-      - name: Prepare SSH key
-        run: |
-          mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+      - name: Deploy via FTPS
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server:     ${{ secrets.FTP_HOST }}
+          username:   ${{ secrets.FTP_USER }}
+          password:   ${{ secrets.FTP_PASSWORD }}
+          server-dir: ${{ secrets.FTP_PATH }}
+          protocol: ftps
+          # ברירת המחדל היא לא למחוק דבר בשרת. משאירים אותה.
+          dangerous-clean-slate: false
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/.github/**
+            **/uploads/**
+            **/node_modules/**
+            **/vendor/**
+            .env
+            **/*.log
+            **/error_log
+            **/.DS_Store
 
-      - name: Deploy code via rsync
+      - name: What to do next
         run: |
-          rsync -rlptz \
-            --exclude='.git' --exclude='.github' \
-            --exclude='vendor/' --exclude='node_modules/' \
-            --exclude='uploads/' \
-            --exclude='.env' --exclude='.env.*' \
-            --exclude='*.log' --exclude='error_log' \
-            --exclude='.DS_Store' --exclude='._*' \
-            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
-            ./ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}/"
-          echo "Deploy complete"
-
-      # אם השלב הזה נכשל, הקוד כבר בשרת אבל הסכמה לא עודכנה.
-      # זה מצב שהאפליקציה יודעת לחיות איתו: schema.php מזהה אותו
-      # ומסתיר את התכונות שתלויות בסכמה, במקום לקרוס. אפשר להשלים
-      # ידנית מאזור "תחזוקה ופיתוח" בממשק הניהול.
-      - name: Run database migrations
-        run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
-            "cd '${{ secrets.DEPLOY_PATH }}' && php db/migrate.php"
+          echo "הקוד עלה לשרת."
+          echo "אם יש מיגרציות ממתינות - הרץ אותן מ-admin.php,"
+          echo "לשונית 'תחזוקה ופיתוח', כפתור 'הרץ מיגרציות ממתינות'."
