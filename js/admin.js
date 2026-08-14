@@ -3,7 +3,12 @@
 
 const CONFIG = window.APP_CONFIG;
 
-async function callAction(action, fields = {}) {
+/**
+ * @param options.keepFailure מחזיר את התשובה גם כשהיא כישלון, במקום
+ *        להסתפק ב-alert. נדרש לפעולות שמחזירות יומן מפורט - שם דווקא
+ *        הכישלון הוא מה שצריך לראות על המסך.
+ */
+async function callAction(action, fields = {}, options = {}) {
     const formData = new FormData();
     formData.append('action', action);
     formData.append('csrf_token', CONFIG.csrfToken);
@@ -23,7 +28,7 @@ async function callAction(action, fields = {}) {
 
         const data = await response.json();
 
-        if (!data.success) {
+        if (!data.success && !options.keepFailure) {
             alert(data.message || 'הפעולה נכשלה');
             return null;
         }
@@ -573,6 +578,33 @@ const MIGRATION_STATES = {
     skipped:   { css: 'skipped', icon: 'fa-forward' },
     failed:    { css: 'failed',  icon: 'fa-xmark' }
 };
+
+/** מושך את הקוד מגיטהאב ומריץ מיגרציות, בלי טרמינל */
+async function runDeploy() {
+    const button = document.getElementById('deployBtn');
+    const status = document.getElementById('deployStatus');
+    const output = document.getElementById('deployOutput');
+
+    if (!confirm('למשוך את הקוד העדכני מגיטהאב?\n\nמשיכה שדורשת מיזוג תידחה ותדווח, ולא תדרוס כלום.')) {
+        return;
+    }
+
+    button.disabled = true;
+    status.textContent = 'מושך...';
+    output.innerHTML = '';
+
+    const data = await callAction('deploy', {}, { keepFailure: true });
+
+    button.disabled = false;
+
+    if (!data) {
+        status.textContent = 'שגיאת תקשורת';
+        return;
+    }
+
+    status.textContent = data.message;
+    output.innerHTML = renderMigrationLog(data.log || []);
+}
 
 async function runMigrations() {
     const button = document.getElementById('runMigrationsBtn');
