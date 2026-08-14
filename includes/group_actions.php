@@ -2,6 +2,7 @@
 // includes/group_actions.php
 // טיפול בכל פעולות ה-AJAX של הקבוצה
 
+require_once __DIR__ . '/currency.php';
 require_once __DIR__ . '/upload.php';
 require_once __DIR__ . '/notifications.php';
 require_once __DIR__ . '/participation.php';
@@ -435,7 +436,7 @@ function actionSetSplitMode(GroupContext $context) {
         throw $e;
     }
 
-    $symbol      = defined('CURRENCY_SYMBOL') ? CURRENCY_SYMBOL : '₪';
+    $symbol      = currencySymbol();
     $description = [
         'percentage'  => 'אחוזים, שווה בשווה בין כולם',
         'shares'      => 'לפי נפשות',
@@ -842,7 +843,7 @@ function actionUpdatePurchase(GroupContext $context) {
 
         $context->pdo->commit();
 
-        $symbol = defined('CURRENCY_SYMBOL') ? CURRENCY_SYMBOL : '₪';
+        $symbol = currencySymbol();
         $body   = actorName() . ' עדכן קנייה ל-' . $symbol . number_format((float)$amount, 2)
             . ($description !== '' ? ' (' . $description . ')' : '');
 
@@ -948,7 +949,7 @@ function notifyNewPurchaseSafely(GroupContext $context, $purchaseId, $amount, $d
         }
 
         $buyer  = $_SESSION['name'] ?? 'משתתף';
-        $symbol = defined('CURRENCY_SYMBOL') ? CURRENCY_SYMBOL : '₪';
+        $symbol = currencySymbol();
         $body   = $description !== ''
             ? sprintf('%s רשם קנייה: %s, %s%s', $buyer, $description, $symbol, number_format((float)$amount, 2))
             : sprintf('%s רשם קנייה על %s%s', $buyer, $symbol, number_format((float)$amount, 2));
@@ -1178,7 +1179,7 @@ function actionAddSettlement(GroupContext $context) {
     $settlementId = (int)$context->pdo->lastInsertId();
 
     // שני הצדדים להעברה מקבלים הודעה, גם אם מישהו אחר רשם אותה
-    $symbol = defined('CURRENCY_SYMBOL') ? CURRENCY_SYMBOL : '₪';
+    $symbol = currencySymbol();
     $body   = actorName() . ' רשם העברה של ' . $symbol . number_format($amount, 2)
         . ' ב"' . groupDisplayName($context) . '"';
 

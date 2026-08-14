@@ -13,6 +13,8 @@
  * group_calculations.php, ולכן שאר החישוב לא צריך להכיר את הסוג.
  */
 
+require_once __DIR__ . '/currency.php';
+
 const PARTICIPATION_TYPES = ['percentage', 'fixed', 'shares'];
 
 /**
@@ -47,7 +49,7 @@ function participationLabel($type, $value) {
         return $value . '%';
     }
 
-    $symbol = defined('CURRENCY_SYMBOL') ? CURRENCY_SYMBOL : '₪';
+    $symbol = currencySymbol();
 
     return $symbol . number_format((float)$value, 2);
 }
