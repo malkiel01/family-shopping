@@ -276,6 +276,7 @@ php tests/actions_test.php        # שכבת הפעולות (SQLite בזיכרו
 php tests/webpush_test.php        # הצפנה וחתימת VAPID
 php tests/migrations_test.php     # מבנה קטלוג המיגרציות
 php tests/export_test.php         # מערכי הייצוא ובניית ה-CSV
+php tests/currency_test.php       # אימות סימן המטבע
 ```
 
 הבדיקות רצות מול SQLite בזיכרון ולא דורשות מסד נתונים או `.env`.

@@ -74,7 +74,15 @@ defineOnce('GOOGLE_CLIENT_ID', $_ENV['CLIENT_ID'] ?? '');
 // הגדרות כלליות
 defineOnce('SITE_NAME', 'מנהל האירועים המשפחתי');
 defineOnce('TIMEZONE', 'Asia/Jerusalem');
-defineOnce('CURRENCY_SYMBOL', '₪');
+// הקידומת APP_ אינה קישוט. CURRENCY_SYMBOL הוא קבוע מובנה של PHP
+// (nl_langinfo, בתוסף standard) שערכו המספר 262145, ולכן ההגדרה
+// הקודמת בשם הזה מעולם לא נכנסה לתוקף - defineOnce ויתרה בשקט,
+// ומסך הניהול הציג 262145 לפני כל סכום.
+//
+// אין לקרוא את הקבוע ישירות לתצוגה. currencySymbol() שב-
+// includes/currency.php מאמתת אותו ונופלת ל-₪ בעת הצורך.
+defineOnce('APP_CURRENCY_SYMBOL', $_ENV['CURRENCY_SYMBOL'] ?? '₪');
+require_once __DIR__ . '/includes/currency.php';
 
 // נתיב הבסיס של האפליקציה באתר (בלי סלאש בסוף)
 defineOnce('APP_BASE_PATH', rtrim($_ENV['APP_BASE_PATH'] ?? '/family', '/'));

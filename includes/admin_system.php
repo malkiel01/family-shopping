@@ -100,6 +100,8 @@ function systemInfo(PDO $pdo) {
         'נתיב בסיס'        => APP_BASE_PATH,
         'אזור זמן'         => TIMEZONE,
         'קבצי קבלות'       => $uploads['count'] . ' קבצים, ' . formatBytes($uploads['bytes']),
+        'סימן מטבע'        => currencySymbol()
+            . ' (CURRENCY_SYMBOL של PHP: ' . reservedCurrencyConstant() . ')',
         'זמן שרת'          => date('Y-m-d H:i'),
     ];
 }
@@ -219,6 +221,13 @@ function systemHealthChecks(PDO $pdo) {
         'HTTPS',
         isHttpsRequest() ? 'ok' : 'fail',
         isHttpsRequest() ? 'הבקשה מוצפנת' : 'הדף נטען ללא HTTPS - עוגיית הסשן אינה מסומנת secure'
+    );
+
+    // --- סימן המטבע ---
+    $add(
+        'סימן מטבע',
+        isCurrencySymbol(currencySymbol()) ? 'ok' : 'fail',
+        'מוצג ' . currencySymbol() . '. הקבוע CURRENCY_SYMBOL שמור ל-PHP ואינו בשימוש'
     );
 
     // --- שרידי קוד ---

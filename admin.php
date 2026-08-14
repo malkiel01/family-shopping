@@ -178,7 +178,7 @@ function adminMoney($value) {
     }
 
     $value  = (float)$value;
-    $symbol = CURRENCY_SYMBOL;
+    $symbol = currencySymbol();
 
     if (abs($value) >= 1000000) {
         return $symbol . number_format($value / 1000000, 1) . 'M';
@@ -265,13 +265,13 @@ function adminMoney($value) {
                     <?php endif; ?>
                 </div>
                 <div class="admin-stat" title="<?php
-                    echo htmlspecialchars(CURRENCY_SYMBOL . number_format((float)$overview['spent'], 2));
+                    echo htmlspecialchars(currencySymbol() . number_format((float)$overview['spent'], 2));
                 ?>">
                     <span class="admin-stat-value"><?php echo adminMoney($overview['spent']); ?></span>
                     <span class="admin-stat-label">סך ההוצאות</span>
                     <?php if ((float)$overview['spent_all'] > (float)$overview['spent']): ?>
                         <span class="admin-stat-extra" title="<?php
-                            echo htmlspecialchars(CURRENCY_SYMBOL . number_format((float)$overview['spent_all'], 2));
+                            echo htmlspecialchars(currencySymbol() . number_format((float)$overview['spent_all'], 2));
                         ?>">
                             הכל: <?php echo adminMoney($overview['spent_all']); ?>
                         </span>
