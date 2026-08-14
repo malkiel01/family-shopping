@@ -36,6 +36,30 @@
     color: #dc3545;
 }
 
+/* השורה השנייה במלבן: אותו מדד בלי סינון, כלומר כולל אירועים
+   שנמחקו. מופיעה רק כשיש פער בפועל, ומופרדת בקו דק כדי שלא
+   תיקרא בטעות כחלק מהמספר שמעליה. */
+.admin-stat-extra {
+    display: block;
+    margin-top: 6px;
+    padding-top: 5px;
+    border-top: 1px solid #eef0f6;
+    font-size: 11px;
+    color: #8a90a6;
+}
+
+.admin-stats-note {
+    margin: -6px 0 14px;
+    padding: 10px 12px;
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.06);
+}
+
+.admin-stats-note strong {
+    color: #5a6076;
+}
+
 /* --- רשימת המשתמשים --- */
 .admin-users {
     display: flex;

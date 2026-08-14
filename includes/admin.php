@@ -677,6 +677,14 @@ function adminOverview(PDO $pdo) {
             JOIN purchase_groups pg ON pg.id = si.group_id
             WHERE pg.is_active = 1"),
 
+        // ואותם שלושה בלי שום סינון. אירוע שנמחק אינו נעלם - הוא
+        // מסומן is_active = 0 והנתונים שלו נשארים במקומם. הסקירה
+        // מציגה את הפעיל, אבל חייבת גם דרך לראות את הכל, אחרת
+        // נתונים אמיתיים פשוט נעלמים מהמסך בלי שאיש יידע.
+        'purchases_all' => $one("SELECT COUNT(*) FROM group_purchases"),
+        'spent_all'     => $sum("SELECT COALESCE(SUM(amount), 0) FROM group_purchases"),
+        'items_all'     => $one("SELECT COUNT(*) FROM shopping_items"),
+
         'contacts'  => $one("SELECT COUNT(*) FROM contacts"),
     ];
 }
