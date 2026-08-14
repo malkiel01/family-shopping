@@ -207,6 +207,12 @@
     box-shadow: 0 3px 12px rgba(0, 0, 0, 0.08);
     overflow-x: auto;
     scrollbar-width: none;
+
+    /* הדהוי בקצה השמאלי הוא הרמז היחיד שיש עוד לשוניות מעבר
+       למסך. בלעדיו נראה שיש שלוש בלבד, ואף אחד לא מנסה לגלול
+       שורה שנראית שלמה. */
+    -webkit-mask-image: linear-gradient(to left, #000 88%, transparent 100%);
+            mask-image: linear-gradient(to left, #000 88%, transparent 100%);
 }
 
 .admin-nav::-webkit-scrollbar {

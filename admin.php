@@ -164,6 +164,32 @@ $sections = [
 function adminNum($value) {
     return $value === null ? '—' : number_format((int)$value);
 }
+
+/**
+ * סכום כסף למלבן סטטיסטיקה.
+ *
+ * מעוגל לשקלים שלמים - אגורות בסכום כלל-מערכתי הן רעש - ומקוצר
+ * ל-K או M מעל אלף, כדי שהמספר לא יישפך מהמלבן ויישאר קריא
+ * במסך של טלפון.
+ */
+function adminMoney($value) {
+    if ($value === null) {
+        return '—';
+    }
+
+    $value  = (float)$value;
+    $symbol = CURRENCY_SYMBOL;
+
+    if (abs($value) >= 1000000) {
+        return $symbol . number_format($value / 1000000, 1) . 'M';
+    }
+
+    if (abs($value) >= 10000) {
+        return $symbol . number_format($value / 1000, 1) . 'K';
+    }
+
+    return $symbol . number_format($value);
+}
 ?>
 <!DOCTYPE html>
 <html dir="rtl" lang="he">
@@ -233,8 +259,10 @@ function adminNum($value) {
                     <span class="admin-stat-value"><?php echo adminNum($overview['purchases']); ?></span>
                     <span class="admin-stat-label">קניות</span>
                 </div>
-                <div class="admin-stat">
-                    <span class="admin-stat-value"><?php echo CURRENCY_SYMBOL . adminNum($overview['spent']); ?></span>
+                <div class="admin-stat" title="<?php
+                    echo htmlspecialchars(CURRENCY_SYMBOL . number_format((float)$overview['spent'], 2));
+                ?>">
+                    <span class="admin-stat-value"><?php echo adminMoney($overview['spent']); ?></span>
                     <span class="admin-stat-label">סך ההוצאות</span>
                 </div>
                 <div class="admin-stat">
