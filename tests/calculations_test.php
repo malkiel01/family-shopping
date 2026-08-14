@@ -134,6 +134,59 @@ $r = calculateGroupBalance($m9,$p9,[['from_member_id'=>2,'to_member_id'=>3,'amou
 check('ב נשאר עם 49', round(abs(byNick($r,'ב')['openBalance']),2), 49);
 check('ג מחזיק 149', round(abs(byNick($r,'ג')['openBalance']),2), 149);
 
+// ---- 9ד. regression: paying someone must not create a bigger debt to them
+// הבאג האמיתי: משתתף שילם למי שהיה חייב לו, והמסך הציג לו מיד
+// חוב *גדול יותר* לאותו אדם. הסכום הכולל היה נכון - הזיווג חושב
+// מאפס וצירף אותו לנושה אחר. כאן ננעל שהתשלום סוגר את החוב שבין
+// השניים, ולא נוגע באיש אחר.
+echo "\n9ד. תשלום סוגר את החוב לאותו אדם\n";
+$mR = [];
+foreach ([[1,'מלכיאל'],[2,'חלילי'],[3,'יוסף'],[4,'שמואל'],[5,'חגי']] as [$id,$nick]) {
+    $mR[] = member($id, $nick, 'percentage', 20);
+}
+$pR = [];
+foreach ([[3,282],[2,214],[2,216],[2,272],[2,134],[2,71],[4,145],[4,92],[1,900],[1,127],[5,189.10]] as $i => [$who,$sum]) {
+    $pR[] = ['id'=>$i+1,'member_id'=>$who,'amount'=>$sum,'excluded_ids'=>[]];
+}
+
+/** החוב של אדם אחד כלפי אדם אחר, מתוך רשימת ההעברות */
+function debtBetween($r, $fromId, $toId) {
+    foreach ($r['transfers'] as $t) {
+        if ($t['from_id'] === $fromId && $t['to_id'] === $toId) return $t['amount'];
+    }
+    return 0.0;
+}
+
+$r      = calculateGroupBalance($mR, $pR);
+$before = debtBetween($r, 4, 2);   // שמואל -> חלילי
+$other  = debtBetween($r, 4, 1);   // שמואל -> מלכיאל
+
+check('לפני: לשמואל יש חוב לחלילי', $before > 0 ? 1 : 0, 1);
+check('ולחוב נפרד למלכיאל',        $other  > 0 ? 1 : 0, 1);
+
+// שמואל משלם לחלילי את רוב החוב
+$paid = round($before - 1.26, 2);
+$r    = calculateGroupBalance($mR, $pR, [['from_member_id'=>4,'to_member_id'=>2,'amount'=>$paid]]);
+
+check('החוב לחלילי קטן בדיוק בסכום ששולם', debtBetween($r, 4, 2), round($before - $paid, 2));
+check('החוב למלכיאל לא זז',                debtBetween($r, 4, 1), $other);
+check('ובוודאי שלא גדל החוב לחלילי',       debtBetween($r, 4, 2) < $before ? 1 : 0, 1);
+
+// שאר המשתתפים לא נגעו בזה בכלל
+$rBefore = calculateGroupBalance($mR, $pR);
+check('חגי לא הושפע',      debtBetween($r, 5, 1), debtBetween($rBefore, 5, 1));
+check('יוסף לא הושפע',     debtBetween($r, 3, 1), debtBetween($rBefore, 3, 1));
+
+// ואין שתי שורות לאותו זוג
+$seen = [];
+$dupes = 0;
+foreach ($r['transfers'] as $t) {
+    $key = $t['from_id'] . '>' . $t['to_id'];
+    if (isset($seen[$key])) $dupes++;
+    $seen[$key] = true;
+}
+check('אין שתי העברות לאותו זוג', $dupes, 0);
+
 // ---- 10. everyone excluded from a purchase -> unallocated, no crash
 echo "\n10. כולם מוחרגים מקנייה\n";
 $r = calculateGroupBalance($m5,[['id'=>1,'member_id'=>1,'amount'=>100,'excluded_ids'=>[1,2]]]);

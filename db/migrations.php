@@ -530,6 +530,20 @@ function migrationCatalog(PDO $pdo, $dbName) {
         ],
     ];
 
+    // --------------------------------------------------------
+    // קיזוז בין אירועים נרשם כשתי התחשבנויות, אחת בכל אירוע.
+    // בלי ערך משלו הן נראות כמו שני תשלומים שלא היו, ואי אפשר
+    // לזהות שהן צמד אחד.
+    $catalog[] = [
+        'id'    => '012',
+        'title' => 'קיזוז בין אירועים',
+        'steps' => [
+            stepWidenEnum($pdo, $dbName, 'settlements', 'type', 'offset',
+                "ENUM('payment','transfer','offset') NOT NULL DEFAULT 'payment'",
+                "מצב 'offset' בהתחשבנות"),
+        ],
+    ];
+
     return $catalog;
 }
 
