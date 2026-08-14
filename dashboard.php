@@ -391,6 +391,10 @@ function eventDateLabel($date) {
                     <i class="fas fa-shield-halved"></i>
                 </a>
                 <?php endif; ?>
+                <a href="offsets.php" class="btn-gear" title="קיזוזים בין אירועים"
+                   aria-label="קיזוזים בין אירועים">
+                    <i class="fas fa-scale-balanced"></i>
+                </a>
                 <a href="contacts.php" class="btn-gear" title="אנשי קשר" aria-label="אנשי קשר">
                     <i class="fas fa-address-book"></i>
                 </a>

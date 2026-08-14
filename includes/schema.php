@@ -53,16 +53,13 @@ function settlementTypesReady(PDO $pdo) {
         return $ready;
     }
 
+    // בדיקה ישירה ולא דרך information_schema: היא זולה יותר,
+    // והיא גם עובדת על כל מנוע - כולל SQLite שבו רצות הבדיקות,
+    // שאין בו information_schema בכלל.
     try {
-        $stmt = $pdo->prepare("
-            SELECT COUNT(*) FROM information_schema.COLUMNS
-            WHERE TABLE_SCHEMA = DATABASE()
-              AND TABLE_NAME = 'settlements' AND COLUMN_NAME = 'type'
-        ");
-        $stmt->execute();
-        $ready = ((int)$stmt->fetchColumn() === 1);
+        $pdo->query("SELECT type FROM settlements WHERE 1 = 0");
+        $ready = true;
     } catch (Exception $e) {
-        error_log('Settlement type check failed: ' . $e->getMessage());
         $ready = false;
     }
 
