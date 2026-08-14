@@ -505,10 +505,24 @@ function renderCalculationsView(array $members, array $result, $canSettle, array
                 <div class="transfer-bottom">
                     <span class="transfer-amount">₪<?php echo number_format($transfer['amount'], 2); ?></span>
                     <?php if ($canSettle): ?>
-                    <button class="btn-settle"
-                            onclick="markSettled(<?php echo $transfer['from_id']; ?>, <?php echo $transfer['to_id']; ?>, <?php echo $transfer['amount']; ?>)">
-                        <i class="fas fa-check"></i> שולם
-                    </button>
+                    <span class="transfer-actions">
+                        <button class="btn-settle"
+                                onclick="openSettleModal(<?php
+                                    echo $transfer['from_id'], ', ', $transfer['to_id'], ', ', $transfer['amount'];
+                                ?>, <?php echo htmlspecialchars(json_encode(
+                                    $transfer['from'] . ' → ' . $transfer['to'], JSON_UNESCAPED_UNICODE
+                                ), ENT_QUOTES); ?>)">
+                            <i class="fas fa-check"></i> שולם
+                        </button>
+                        <button class="btn-transfer-debt" title="להעביר את החוב למשתתף אחר"
+                                onclick="openDebtTransferModal(<?php
+                                    echo $transfer['from_id'], ', ', $transfer['amount'];
+                                ?>, <?php echo htmlspecialchars(json_encode(
+                                    $transfer['from'], JSON_UNESCAPED_UNICODE
+                                ), ENT_QUOTES); ?>)">
+                            <i class="fas fa-right-left"></i> העבר חוב
+                        </button>
+                    </span>
                     <?php endif; ?>
                 </div>
             </div>
@@ -525,11 +539,16 @@ function renderCalculationsView(array $members, array $result, $canSettle, array
     <div class="settlements-section">
         <h3>התחשבנויות שבוצעו:</h3>
         <?php foreach ($settlementHistory as $settlement): ?>
-        <div class="settlement-row">
+        <?php $isTransfer = (($settlement['type'] ?? 'payment') === 'transfer'); ?>
+        <div class="settlement-row<?php echo $isTransfer ? ' is-transfer' : ''; ?>">
             <span class="settlement-parties">
                 <?php echo htmlspecialchars($settlement['from_nickname']); ?>
-                <i class="fas fa-arrow-left"></i>
+                <i class="fas <?php echo $isTransfer ? 'fa-right-left' : 'fa-arrow-left'; ?>"
+                   title="<?php echo $isTransfer ? 'החוב הועבר' : 'שולם'; ?>"></i>
                 <?php echo htmlspecialchars($settlement['to_nickname']); ?>
+                <?php if ($isTransfer): ?>
+                    <span class="settlement-tag">העברת חוב</span>
+                <?php endif; ?>
             </span>
             <span class="settlement-amount">₪<?php echo number_format($settlement['amount'], 2); ?></span>
             <span class="settlement-date"><?php echo date('d/m/Y', strtotime($settlement['created_at'])); ?></span>

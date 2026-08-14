@@ -3,6 +3,7 @@
 // טיפול בכל פעולות ה-AJAX של הקבוצה
 
 require_once __DIR__ . '/currency.php';
+require_once __DIR__ . '/schema.php';
 require_once __DIR__ . '/upload.php';
 require_once __DIR__ . '/notifications.php';
 require_once __DIR__ . '/participation.php';
@@ -1140,6 +1141,10 @@ function actionAddSettlement(GroupContext $context) {
     $amount       = round(floatval($_POST['amount'] ?? 0), 2);
     $note         = trim($_POST['note'] ?? '');
 
+    // תשלום והעברת חוב זהים במאזן ושונים במשמעות. ערך לא מוכר
+    // נופל לתשלום, כדי ששום דבר שרירותי לא יגיע לעמודת ה-enum.
+    $isTransfer = (($_POST['type'] ?? '') === 'transfer');
+
     if ($amount <= 0) {
         jsonFail('סכום ההעברה חייב להיות חיובי');
         return;
@@ -1166,25 +1171,45 @@ function actionAddSettlement(GroupContext $context) {
         return;
     }
 
-    $stmt = $context->pdo->prepare("
-        INSERT INTO settlements (group_id, from_member_id, to_member_id, amount, note, created_by)
-        VALUES (?, ?, ?, ?, ?, ?)
-    ");
-    $stmt->execute([
-        $context->groupId, $fromMemberId, $toMemberId,
-        $amount, $note !== '' ? $note : null, $context->userId,
-    ]);
+    // העמודה נוספה במיגרציה 011. עד שהיא תרוץ, העברת חוב נרשמת
+    // כהתחשבנות רגילה - המאזן יוצא נכון, רק ההבחנה חסרה.
+    $hasType = settlementTypesReady($context->pdo);
+
+    if ($hasType) {
+        $stmt = $context->pdo->prepare("
+            INSERT INTO settlements (group_id, from_member_id, to_member_id, amount, note, created_by, type)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ");
+        $stmt->execute([
+            $context->groupId, $fromMemberId, $toMemberId,
+            $amount, $note !== '' ? $note : null, $context->userId,
+            $isTransfer ? 'transfer' : 'payment',
+        ]);
+    } else {
+        $stmt = $context->pdo->prepare("
+            INSERT INTO settlements (group_id, from_member_id, to_member_id, amount, note, created_by)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ");
+        $stmt->execute([
+            $context->groupId, $fromMemberId, $toMemberId,
+            $amount, $note !== '' ? $note : null, $context->userId,
+        ]);
+    }
 
     // חייב להילקח לפני ההתראה, שמבצעת INSERT משלה
     $settlementId = (int)$context->pdo->lastInsertId();
 
-    // שני הצדדים להעברה מקבלים הודעה, גם אם מישהו אחר רשם אותה
+    // שני הצדדים מקבלים הודעה, גם אם מישהו אחר רשם אותה
     $symbol = currencySymbol();
-    $body   = actorName() . ' רשם העברה של ' . $symbol . number_format($amount, 2)
-        . ' ב"' . groupDisplayName($context) . '"';
+    $sum    = $symbol . number_format($amount, 2);
+    $body   = $isTransfer
+        ? actorName() . ' העביר חוב של ' . $sum . ' ב"' . groupDisplayName($context) . '"'
+        : actorName() . ' רשם העברה של ' . $sum . ' ב"' . groupDisplayName($context) . '"';
+
+    $title = $isTransfer ? 'חוב הועבר' : 'התחשבנות נרשמה';
 
     foreach ([$fromMemberId, $toMemberId] as $party) {
-        notifyMember($context, $party, 'settlement', 'התחשבנות נרשמה', $body);
+        notifyMember($context, $party, 'settlement', $title, $body);
     }
 
     jsonOk(['settlement_id' => $settlementId]);

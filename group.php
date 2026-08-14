@@ -676,6 +676,8 @@ $canEdit = !$is_closed;
         renderEventModal($group);
         renderItemModal();
         renderEditPurchaseModal($members, $is_owner);
+        renderSettleModal();
+        renderDebtTransferModal($members);
     }
     renderAddPurchaseModal($members, $is_owner, $member_id, $featuresReady);
     renderImageModal();
