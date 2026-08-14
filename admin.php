@@ -258,22 +258,54 @@ function adminMoney($value) {
                 <div class="admin-stat">
                     <span class="admin-stat-value"><?php echo adminNum($overview['purchases']); ?></span>
                     <span class="admin-stat-label">קניות</span>
+                    <?php if ($overview['purchases_all'] > $overview['purchases']): ?>
+                        <span class="admin-stat-extra">
+                            הכל: <?php echo adminNum($overview['purchases_all']); ?>
+                        </span>
+                    <?php endif; ?>
                 </div>
                 <div class="admin-stat" title="<?php
                     echo htmlspecialchars(CURRENCY_SYMBOL . number_format((float)$overview['spent'], 2));
                 ?>">
                     <span class="admin-stat-value"><?php echo adminMoney($overview['spent']); ?></span>
                     <span class="admin-stat-label">סך ההוצאות</span>
+                    <?php if ((float)$overview['spent_all'] > (float)$overview['spent']): ?>
+                        <span class="admin-stat-extra" title="<?php
+                            echo htmlspecialchars(CURRENCY_SYMBOL . number_format((float)$overview['spent_all'], 2));
+                        ?>">
+                            הכל: <?php echo adminMoney($overview['spent_all']); ?>
+                        </span>
+                    <?php endif; ?>
                 </div>
                 <div class="admin-stat">
                     <span class="admin-stat-value"><?php echo adminNum($overview['items']); ?></span>
                     <span class="admin-stat-label">פריטי רשימה</span>
+                    <?php if ($overview['items_all'] > $overview['items']): ?>
+                        <span class="admin-stat-extra">
+                            הכל: <?php echo adminNum($overview['items_all']); ?>
+                        </span>
+                    <?php endif; ?>
                 </div>
                 <div class="admin-stat">
                     <span class="admin-stat-value"><?php echo adminNum($overview['contacts']); ?></span>
                     <span class="admin-stat-label">אנשי קשר</span>
                 </div>
             </div>
+
+            <?php
+            // מוצג רק כשיש בפועל פער, אחרת זו שורת הסבר על כלום
+            $hasArchived = ($overview['purchases_all'] > $overview['purchases'])
+                || ((float)$overview['spent_all'] > (float)$overview['spent'])
+                || ($overview['items_all'] > $overview['items']);
+            ?>
+            <?php if ($hasArchived): ?>
+            <p class="admin-note admin-stats-note">
+                המספר הגדול סופר אירועים פעילים בלבד, כדי שיתאים לספירת האירועים
+                שלצידו. <strong>"הכל"</strong> כולל גם אירועים שנמחקו — הנתונים
+                שלהם נשמרים במלואם ומופיעים בייצוא, ואפשר לשחזר כל אירוע מלשונית
+                האירועים.
+            </p>
+            <?php endif; ?>
 
             <div class="admin-card">
                 <h2 class="admin-card-title">
