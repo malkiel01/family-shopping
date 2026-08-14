@@ -1,0 +1,94 @@
+name: Deploy to production
+
+# פריסה אוטומטית git -> השרת, דרך FTPS. רצה על כל push ל-main,
+# וגם ידנית מלשונית Actions.
+#
+# למה FTP ולא SSH: cPanel של האחסון הזה מסרב לייצר מפתח SSH בלי
+# סיסמה, ומפתח עם סיסמה חסר תועלת בפריסה אוטומטית - אין מי
+# שיקליד אותה. הסרת הסיסמה דורשת טרמינל, שאינו זמין. FTPS עוקף
+# את זה לגמרי: שם משתמש וסיסמה, שאפשר להפיק מהדפדפן.
+#
+# מעלה קוד בלבד: .env ו-uploads/ מוחרגים, ולכן הסודות והקבלות
+# שבשרת לעולם אינם נדרסים. אין מחיקה - קובץ שנמחק מהריפו יישאר
+# בשרת. זה המחיר של ההבטחה שפריסה לא מוחקת דבר שהיא לא מכירה.
+#
+# המיגרציות אינן רצות כאן, כי FTP מעביר קבצים ואינו מריץ פקודות.
+# אחרי הפריסה יש להריץ אותן פעם אחת מאזור "תחזוקה ופיתוח"
+# שבממשק הניהול - כפתור אחד, ואידמפוטנטי.
+
+# כרגע ידני בלבד. הפעלה על push תתווסף רק אחרי שארבעת ה-secrets
+# יוגדרו - אחרת כל מיזוג היה נכשל בשלב ה-FTP ושולח התראת כשלון.
+# להפעלה אוטומטית: החזר את שתי השורות המסומנות.
+on:
+  # push:
+  #   branches: [main]
+  workflow_dispatch: {}
+
+# לעולם לא שתי פריסות במקביל
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+
+      # שער ראשון: קוד שאינו נטען בכלל לא יעלה לשרת
+      - name: PHP syntax-check gate
+        run: |
+          set -euo pipefail
+          ERR=0
+          while IFS= read -r -d '' f; do
+            php -l "$f" > /dev/null || ERR=1
+          done < <(find . -name '*.php' -not -path './.git/*' -print0)
+          if [ "$ERR" -ne 0 ]; then
+            echo "::error::PHP syntax errors — aborting deploy"
+            exit 1
+          fi
+          echo "PHP lint OK"
+
+      # שער שני: הבדיקות. הן אינן דורשות מסד נתונים או .env,
+      # ולכן אפשר להריץ אותן כאן בדיוק כמו שהן רצות מקומית.
+      - name: Run tests
+        run: |
+          set -euo pipefail
+          for t in tests/*.php; do
+            echo "--- $t"
+            php "$t"
+          done
+
+      - name: Deploy via FTPS
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server:     ${{ secrets.FTP_HOST }}
+          username:   ${{ secrets.FTP_USER }}
+          password:   ${{ secrets.FTP_PASSWORD }}
+          server-dir: ${{ secrets.FTP_PATH }}
+          protocol: ftps
+          # ברירת המחדל היא לא למחוק דבר בשרת. משאירים אותה.
+          dangerous-clean-slate: false
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/.github/**
+            **/uploads/**
+            **/node_modules/**
+            **/vendor/**
+            .env
+            **/*.log
+            **/error_log
+            **/.DS_Store
+
+      - name: What to do next
+        run: |
+          echo "הקוד עלה לשרת."
+          echo "אם יש מיגרציות ממתינות - הרץ אותן מ-admin.php,"
+          echo "לשונית 'תחזוקה ופיתוח', כפתור 'הרץ מיגרציות ממתינות'."

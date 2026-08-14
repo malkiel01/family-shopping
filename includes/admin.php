@@ -639,6 +639,16 @@ function adminOverview(PDO $pdo) {
         }
     };
 
+    // סכומי כסף אינם ספירות. המרה ל-int הייתה חותכת את האגורות
+    // בכל שורה שנסכמה, ומציגה סכום שאינו תואם לאף דוח אחר.
+    $sum = function ($sql) use ($pdo) {
+        try {
+            return (float)$pdo->query($sql)->fetchColumn();
+        } catch (Exception $e) {
+            return 0.0;
+        }
+    };
+
     return [
         'users'     => $one("SELECT COUNT(*) FROM users"),
         'groups'    => $one("SELECT COUNT(*) FROM purchase_groups WHERE is_active = 1"),
@@ -650,9 +660,23 @@ function adminOverview(PDO $pdo) {
         'inactive'  => $one("SELECT COUNT(*) FROM users WHERE is_active = 0"),
         'closed'    => $one("SELECT COUNT(*) FROM purchase_groups WHERE status = 'closed' AND is_active = 1"),
         'deleted'   => $one("SELECT COUNT(*) FROM purchase_groups WHERE is_active = 0"),
-        'purchases' => $one("SELECT COUNT(*) FROM group_purchases"),
-        'spent'     => $one("SELECT COALESCE(SUM(amount), 0) FROM group_purchases"),
-        'items'     => $one("SELECT COUNT(*) FROM shopping_items"),
+
+        // שלושת אלה מסננים לאירועים פעילים, בדיוק כמו ספירת
+        // האירועים עצמה. בלי הסינון המסך סתר את עצמו: 14 אירועים
+        // אבל 45 קניות, מהן חלק באירועים שכבר נמחקו.
+        'purchases' => $one("
+            SELECT COUNT(*) FROM group_purchases gp
+            JOIN purchase_groups pg ON pg.id = gp.group_id
+            WHERE pg.is_active = 1"),
+        'spent'     => $sum("
+            SELECT COALESCE(SUM(gp.amount), 0) FROM group_purchases gp
+            JOIN purchase_groups pg ON pg.id = gp.group_id
+            WHERE pg.is_active = 1"),
+        'items'     => $one("
+            SELECT COUNT(*) FROM shopping_items si
+            JOIN purchase_groups pg ON pg.id = si.group_id
+            WHERE pg.is_active = 1"),
+
         'contacts'  => $one("SELECT COUNT(*) FROM contacts"),
     ];
 }
