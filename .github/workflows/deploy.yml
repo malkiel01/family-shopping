@@ -1,0 +1,87 @@
+name: Deploy to production
+
+# פריסה אוטומטית git -> השרת. רצה על כל push ל-main, וגם ידנית
+# מלשונית Actions. מעלה קוד בלבד: .env, uploads/ ו-vendor/ מוחרגים,
+# ולכן הקבלות, הסודות והתלויות שבשרת לעולם אינם נדרסים.
+#
+# rsync רץ בלי --delete בכוונה. קובץ שנמחק מהריפו יישאר בשרת, וזה
+# המחיר של הבטחה חשובה יותר: פריסה לא תמחק דבר שהיא לא מכירה.
+#
+# אחרי העלאת הקוד רצה המיגרציה. היא אידמפוטנטית, ולכן הרצה בכל
+# פריסה אינה מזיקה - היא פשוט מדלגת על מה שכבר בוצע.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+# לעולם לא שתי פריסות במקביל
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+
+      # שער ראשון: קוד שאינו נטען בכלל לא יעלה לשרת
+      - name: PHP syntax-check gate
+        run: |
+          set -euo pipefail
+          ERR=0
+          while IFS= read -r -d '' f; do
+            php -l "$f" > /dev/null || ERR=1
+          done < <(find . -name '*.php' -not -path './.git/*' -print0)
+          if [ "$ERR" -ne 0 ]; then
+            echo "::error::PHP syntax errors — aborting deploy"
+            exit 1
+          fi
+          echo "PHP lint OK"
+
+      # שער שני: הבדיקות. הן אינן דורשות מסד נתונים או .env,
+      # ולכן אפשר להריץ אותן כאן בדיוק כמו שהן רצות מקומית.
+      - name: Run tests
+        run: |
+          set -euo pipefail
+          for t in tests/*.php; do
+            echo "--- $t"
+            php "$t"
+          done
+
+      - name: Prepare SSH key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Deploy code via rsync
+        run: |
+          rsync -rlptz \
+            --exclude='.git' --exclude='.github' \
+            --exclude='vendor/' --exclude='node_modules/' \
+            --exclude='uploads/' \
+            --exclude='.env' --exclude='.env.*' \
+            --exclude='*.log' --exclude='error_log' \
+            --exclude='.DS_Store' --exclude='._*' \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
+            ./ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}/"
+          echo "Deploy complete"
+
+      # אם השלב הזה נכשל, הקוד כבר בשרת אבל הסכמה לא עודכנה.
+      # זה מצב שהאפליקציה יודעת לחיות איתו: schema.php מזהה אותו
+      # ומסתיר את התכונות שתלויות בסכמה, במקום לקרוס. אפשר להשלים
+      # ידנית מאזור "תחזוקה ופיתוח" בממשק הניהול.
+      - name: Run database migrations
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "cd '${{ secrets.DEPLOY_PATH }}' && php db/migrate.php"
