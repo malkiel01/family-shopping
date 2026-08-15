@@ -67,6 +67,31 @@ function settlementTypesReady(PDO $pdo) {
 }
 
 /**
+ * האם עמודות הטלפון קיימות (מיגרציה 014).
+ *
+ * בלעדיהן בקשת התשלום פשוט אינה מוצגת. חשוב מזה: השאילתה שבוחרת
+ * אותן חייבת לדעת זאת מראש, אחרת כל מסך האירוע קורס בשרת שהעדכון
+ * עוד לא רץ בו.
+ */
+function phoneFieldsReady(PDO $pdo) {
+    static $ready = null;
+
+    if ($ready !== null) {
+        return $ready;
+    }
+
+    try {
+        $pdo->query("SELECT phone FROM group_members WHERE 1 = 0");
+        $pdo->query("SELECT phone FROM users WHERE 1 = 0");
+        $ready = true;
+    } catch (Exception $e) {
+        $ready = false;
+    }
+
+    return $ready;
+}
+
+/**
  * באנר שמוצג כשהמיגרציה עוד לא הורצה.
  */
 function renderMigrationNotice() {

@@ -9,6 +9,7 @@ require_once __DIR__ . '/notifications.php';
 require_once __DIR__ . '/participation.php';
 require_once __DIR__ . '/contacts.php';
 require_once __DIR__ . '/debug_log.php';
+require_once __DIR__ . '/phone.php';
 
 /**
  * הקשר הבקשה - נשמר פעם אחת כדי שכל פונקציה תדע
@@ -88,6 +89,7 @@ function handleGroupActions($pdo, $group_id, $user_id, $is_owner, $member_id, $s
         'addMember'        => 'actionAddMember',
         'removeMember'     => 'actionRemoveMember',
         'editMember'       => 'actionEditMember',
+        'setMyPhone'       => 'actionSetMyPhone',
         'splitEqually'     => 'actionSplitEqually',
         'setSplitMode'     => 'actionSetSplitMode',
         'cancelInvitation' => 'actionCancelInvitation',
@@ -508,6 +510,83 @@ function actionRemoveMember(GroupContext $context) {
     jsonOk();
 }
 
+/**
+ * שומר מספר טלפון לרשומת המשתתף.
+ *
+ * מספר ריק מוחק את הקיים - זו הדרך היחידה לחזור בך - ומספר
+ * שאינו נראה כמו מספר נדחה בשקט, כי אין מסך שיכול להציג את
+ * השגיאה באמצע עריכת השתתפות.
+ *
+ * @return bool האם נשמר
+ */
+function saveMemberPhone(GroupContext $context, $memberId, $raw) {
+    if (!phoneFieldsReady($context->pdo)) {
+        return false;
+    }
+
+    $raw   = trim((string)$raw);
+    $phone = normalizePhone($raw);
+
+    // הוקלד משהו שאינו מספר - לא דורסים את מה שכבר שמור
+    if ($raw !== '' && $phone === '') {
+        return false;
+    }
+
+    try {
+        $stmt = $context->pdo->prepare("
+            UPDATE group_members SET phone = ? WHERE id = ? AND group_id = ?
+        ");
+        $stmt->execute([$phone !== '' ? $phone : null, (int)$memberId, $context->groupId]);
+    } catch (Exception $e) {
+        error_log('phone save failed: ' . $e->getMessage());
+        return false;
+    }
+
+    return true;
+}
+
+/**
+ * המשתתף מעדכן את המספר של עצמו.
+ *
+ * נשמר גם בפרופיל, כדי שלא יצטרך להקליד אותו שוב בכל אירוע חדש.
+ * ההרשאה כאן צרה בכוונה: כל אחד ואת שלו בלבד. מספר טלפון הוא
+ * הדבר שאליו נשלחות בקשות תשלום, ואין סיבה שמישהו יוכל להפנות
+ * אותן למקום אחר.
+ */
+function actionSetMyPhone(GroupContext $context) {
+    if (!phoneFieldsReady($context->pdo)) {
+        jsonFail('העדכון שמאפשר שמירת טלפון עוד לא הורץ בשרת');
+        return;
+    }
+
+    $raw   = trim((string)($_POST['phone'] ?? ''));
+    $phone = normalizePhone($raw);
+
+    if ($raw !== '' && $phone === '') {
+        jsonFail('המספר אינו תקין. למשל: 050-1234567');
+        return;
+    }
+
+    if (!saveMemberPhone($context, $context->memberId, $raw)) {
+        jsonFail('שמירת המספר נכשלה');
+        return;
+    }
+
+    try {
+        $stmt = $context->pdo->prepare("UPDATE users SET phone = ? WHERE id = ?");
+        $stmt->execute([$phone !== '' ? $phone : null, $context->userId]);
+    } catch (Exception $e) {
+        // הכישלון כאן אינו מבטל את מה שנשמר באירוע
+        error_log('profile phone save failed: ' . $e->getMessage());
+    }
+
+    jsonOk([
+        'phone'   => $phone,
+        'display' => formatPhone($phone),
+        'message' => $phone === '' ? 'המספר הוסר' : 'המספר נשמר',
+    ]);
+}
+
 function actionEditMember(GroupContext $context) {
     $memberId           = intval($_POST['member_id'] ?? 0);
     $participationType  = participationTypeFromRequest();
@@ -534,6 +613,12 @@ function actionEditMember(GroupContext $context) {
         WHERE id = ? AND group_id = ?
     ");
     $stmt->execute([$participationType, $participationValue, $memberId, $context->groupId]);
+
+    // הטלפון נשמר בנפרד ורק אם נשלח בכלל: טופס ישן, או שרת שבו
+    // המיגרציה עוד לא רצה, לא אמורים לאבד את שאר העריכה בגללו
+    if (array_key_exists('phone', $_POST)) {
+        saveMemberPhone($context, $memberId, $_POST['phone']);
+    }
 
     $share = participationLabel($participationType, $participationValue);
 

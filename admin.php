@@ -967,6 +967,7 @@ function adminMoney($value) {
                     <li><code>php tests/actions_test.php</code><span>בדיקות שכבת הפעולות</span></li>
                     <li><code>php tests/webpush_test.php</code><span>בדיקות ההצפנה והחתימה</span></li>
                     <li><code>php tests/debug_log_test.php</code><span>בדיקות יומן החישובים</span></li>
+                    <li><code>php tests/phone_test.php</code><span>בדיקות מספרי הטלפון</span></li>
                 </ul>
             </div>
         </div><!-- pane-maintenance -->

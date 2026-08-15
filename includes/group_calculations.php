@@ -1,6 +1,8 @@
 <?php
 // includes/group_calculations.php
 // לוגיקת חישובים וחלוקת עלויות
+
+require_once __DIR__ . '/phone.php';
 //
 // ---------------------------------------------------------------
 // מודל החישוב
@@ -485,8 +487,27 @@ function buildSummaryText(array $group, array $result, array $shoppingItems = []
 
 /**
  * מרנדר את מסך החישובים.
+ *
+ * @param array $options viewer_member_id, is_owner, group_name -
+ *        נדרשים כדי להחליט אילו כפתורי תשלום להציג בכל שורה.
+ *        ברירות המחדל משאירות את המסך כפי שהיה.
  */
-function renderCalculationsView(array $members, array $result, $canSettle, array $settlementHistory = []) {
+function renderCalculationsView(array $members, array $result, $canSettle,
+                                array $settlementHistory = [], array $options = []) {
+
+    // המספרים נשלפים מרשימת המשתתפים ולא בשאילתה נוספת: הם כבר
+    // כאן, ומי שקורא לפונקציה בלי מספרים פשוט לא יראה את הכפתורים
+    $phones = [];
+    $names  = [];
+    foreach ($members as $member) {
+        $phones[(int)$member['id']] = memberPhone($member);
+        $names[(int)$member['id']]  = (string)$member['nickname'];
+    }
+
+    $viewerMemberId = (int)($options['viewer_member_id'] ?? 0);
+    $isOwner        = !empty($options['is_owner']);
+    $groupName      = (string)($options['group_name'] ?? '');
+
     if ($result['totalAmount'] == 0 || count($members) === 0) {
         return '<div class="no-data">
             <i class="fas fa-info-circle"></i>
@@ -609,8 +630,33 @@ function renderCalculationsView(array $members, array $result, $canSettle, array
                 סך הכל להעברה: <strong>₪<?php echo number_format($transferTotal, 2); ?></strong>
             </p>
             <?php foreach ($result['transfers'] as $index => $transfer): ?>
-            <?php // שתי שורות ולא ארבעה פריטים בשורה אחת: בטלפון הם
-                  // נמעכו עד שהסכום דרס את השמות והכפתור יצא מהכרטיס ?>
+            <?php
+            // שתי שורות ולא ארבעה פריטים בשורה אחת: בטלפון הם
+            // נמעכו עד שהסכום דרס את השמות והכפתור יצא מהכרטיס
+            $fromId = (int)$transfer['from_id'];
+            $toId   = (int)$transfer['to_id'];
+
+            $debtorPhone   = $phones[$fromId] ?? '';
+            $creditorPhone = $phones[$toId]   ?? '';
+
+            // מי שחייב רוצה את המספר של המקבל, כדי לפתוח את ביט
+            // ולהעביר. מי שמגיע לו רוצה לשלוח תזכורת. שני צרכים
+            // הפוכים, ולכן כל אחד רואה את הכפתור שלו בלבד -
+            // כפתור שאינו שייך לך הוא רעש, ובטלפון גם מקום.
+            $viewerIsDebtor   = ($viewerMemberId > 0 && $viewerMemberId === $fromId);
+            $viewerIsCreditor = ($viewerMemberId > 0 && $viewerMemberId === $toId);
+
+            $showBit = ($viewerIsDebtor || (!$viewerIsCreditor && $isOwner))
+                && $creditorPhone !== '';
+
+            $requestLink = '';
+            if (($viewerIsCreditor || $isOwner) && !$viewerIsDebtor && $debtorPhone !== '') {
+                $requestLink = whatsappLink($debtorPhone, paymentRequestText(
+                    $transfer['from'], $transfer['to'],
+                    $transfer['amount'], $groupName, $creditorPhone
+                ));
+            }
+            ?>
             <div class="transfer-card">
                 <span class="transfer-index"><?php echo $index + 1; ?></span>
                 <div class="transfer-parties">
@@ -647,6 +693,34 @@ function renderCalculationsView(array $members, array $result, $canSettle, array
                     </span>
                     <?php endif; ?>
                 </div>
+
+                <?php if ($showBit || $requestLink !== ''): ?>
+                <div class="transfer-pay">
+                    <?php if ($showBit): ?>
+                    <?php // האפליקציה אינה מזיזה את הכסף - אין לביט ממשק
+                          // שמאפשר זאת - אבל היא יכולה להסיר את כל מה
+                          // שסביבו: המספר מועתק, והסכום על המסך ?>
+                    <button class="btn-bit"
+                            onclick="copyForBit(<?php echo htmlspecialchars(json_encode([
+                                'phone'  => formatPhone($creditorPhone),
+                                'raw'    => preg_replace('/\D+/', '', $creditorPhone),
+                                'name'   => $transfer['to'],
+                                'amount' => number_format($transfer['amount'], 2, '.', ''),
+                            ], JSON_UNESCAPED_UNICODE), ENT_QUOTES); ?>, this)">
+                        <i class="fas fa-mobile-screen"></i>
+                        העתק מספר לביט
+                    </button>
+                    <?php endif; ?>
+
+                    <?php if ($requestLink !== ''): ?>
+                    <a class="btn-request" target="_blank" rel="noopener"
+                       href="<?php echo htmlspecialchars($requestLink); ?>">
+                        <i class="fab fa-whatsapp"></i>
+                        בקש תשלום
+                    </a>
+                    <?php endif; ?>
+                </div>
+                <?php endif; ?>
             </div>
             <?php endforeach; ?>
         <?php else: ?>

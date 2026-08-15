@@ -203,10 +203,17 @@ function updatePercentageInfo() {
     toggleParticipationType();
 }
 
-function editMember(memberId, type, value) {
+function editMember(memberId, type, value, phone = '') {
     document.getElementById('editMemberId').value = memberId;
     document.getElementById('editMemberValue').value = type === 'shares' ? Math.round(value) : value;
     document.querySelector(`input[name="editParticipationType"][value="${type}"]`).checked = true;
+
+    // השדה אינו קיים בשרת שהמיגרציה עוד לא רצה בו
+    const phoneInput = document.getElementById('editMemberPhone');
+    if (phoneInput) {
+        phoneInput.value = phone || '';
+    }
+
     toggleEditParticipationType();
     openModal('editMemberModal');
 }
@@ -687,11 +694,27 @@ document.addEventListener('DOMContentLoaded', function () {
                 return;
             }
 
+            const phoneInput = document.getElementById('editMemberPhone');
+
             callAndReload('editMember', {
                 member_id: document.getElementById('editMemberId').value,
                 participation_type: document.querySelector('input[name="editParticipationType"]:checked').value,
-                participation_value: value
+                participation_value: value,
+                // undefined לא נשלח כלל, וכך שרת בלי העמודה
+                // לא מקבל שדה שאין לו מה לעשות איתו
+                phone: phoneInput ? phoneInput.value : undefined
             });
+        });
+    }
+
+    const myPhoneForm = document.getElementById('myPhoneForm');
+    if (myPhoneForm) {
+        myPhoneForm.addEventListener('submit', function (event) {
+            event.preventDefault();
+
+            submitBusy(myPhoneForm, 'שומר...', () => callAndReload('setMyPhone', {
+                phone: document.getElementById('myPhone').value
+            }));
         });
     }
 
@@ -873,4 +896,61 @@ function fillFromContact() {
     if (value > 0) {
         document.getElementById('memberValue').value = value;
     }
+}
+
+
+// ============================================================
+// תשלום
+// ============================================================
+//
+// האפליקציה אינה מזיזה כסף: לביט אין ממשק שמאפשר העברה בין שני
+// אנשים פרטיים דרך אפליקציה שלישית. מה שכן אפשר זה להסיר את כל
+// החיכוך סביב ההעברה - המספר מועתק, הסכום על המסך, והאישור
+// נרשם בחזרה כאן.
+
+function openMyPhoneModal() {
+    openModal('myPhoneModal');
+
+    const input = document.getElementById('myPhone');
+    if (input) {
+        input.focus();
+        input.select();
+    }
+}
+
+function closeMyPhoneModal() {
+    closeModal('myPhoneModal');
+}
+
+/**
+ * מעתיק את מספר המקבל, ומשאיר את הסכום מול העיניים.
+ *
+ * המספר הוא מה שמודבק בביט, ולכן הוא לבדו בלוח - סכום שנדבק
+ * יחד איתו היה הופך את ההדבקה לחסרת תועלת.
+ */
+async function copyForBit(details, button) {
+    const original = button.innerHTML;
+
+    try {
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(details.raw);
+        } else {
+            const area = document.createElement('textarea');
+            area.value = details.raw;
+            area.style.position = 'fixed';
+            area.style.opacity  = '0';
+            document.body.appendChild(area);
+            area.select();
+            document.execCommand('copy');
+            document.body.removeChild(area);
+        }
+
+        button.innerHTML = '<i class="fas fa-check"></i> ' + details.phone + ' הועתק';
+    } catch (error) {
+        console.error('Copy failed:', error);
+        // בלי לוח, המספר עצמו עדיין שווה משהו על המסך
+        button.innerHTML = '<i class="fas fa-mobile-screen"></i> ' + details.phone;
+    }
+
+    setTimeout(() => { button.innerHTML = original; }, 4000);
 }

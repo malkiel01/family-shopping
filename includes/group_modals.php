@@ -2,6 +2,8 @@
 // includes/group_modals.php
 // כל ה-Modals של דף הקבוצה
 
+require_once __DIR__ . '/phone.php';
+
 /**
  * בורר המשתתפים בקנייה.
  * מסומן = משתתף בהוצאה. הטופס שולח דווקא את *הלא* מסומנים,
@@ -166,11 +168,66 @@ function renderEditMemberModal() {
                     </div>
                     <small id="editPercentageInfo" class="form-hint"></small>
                 </div>
+                <div class="form-group">
+                    <label for="editMemberPhone">טלפון (לא חובה):</label>
+                    <input type="tel" id="editMemberPhone" maxlength="24"
+                           inputmode="tel" placeholder="050-1234567">
+                    <small class="form-hint">
+                        מאפשר לבקש ממנו תשלום בוואטסאפ, ולהעתיק את המספר
+                        שלו לביט. לא מוצג לאיש מחוץ לאירוע.
+                    </small>
+                </div>
                 <div class="modal-actions">
                     <button type="submit" class="btn-primary">
                         <i class="fas fa-save"></i> שמור
                     </button>
                     <button type="button" class="btn-secondary" onclick="closeEditMemberModal()">
+                        ביטול
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <?php
+}
+
+/**
+ * המספר של המשתמש עצמו.
+ *
+ * מסך נפרד ולא שדה בעריכת המשתתף, כי זו פעולה של כל אחד על עצמו
+ * ולא של המנהל על אחרים - וגם כי מי שאין לו מספר צריך לראות
+ * הזמנה למלא אותו, לא טופס שהוא לא נכנס אליו לעולם.
+ */
+function renderMyPhoneModal($currentPhone = '') {
+    ?>
+    <div id="myPhoneModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>המספר שלי</h2>
+                <span class="close" onclick="closeMyPhoneModal()">&times;</span>
+            </div>
+            <form id="myPhoneForm">
+                <p class="modal-text">
+                    כשיש לך מספר, מי שחייב לך יכול להעתיק אותו לביט בלחיצה
+                    אחת — ואתה יכול לשלוח לו בקשת תשלום בוואטסאפ.
+                </p>
+
+                <div class="form-group">
+                    <label for="myPhone">מספר טלפון:</label>
+                    <input type="tel" id="myPhone" maxlength="24" inputmode="tel"
+                           placeholder="050-1234567"
+                           value="<?php echo htmlspecialchars(formatPhone($currentPhone)); ?>">
+                    <small class="form-hint">
+                        נשמר גם לאירועים הבאים שלך. כדי להסיר אותו — למחוק
+                        ולשמור. רק משתתפי האירוע רואים אותו.
+                    </small>
+                </div>
+
+                <div class="modal-actions">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i> שמור
+                    </button>
+                    <button type="button" class="btn-secondary" onclick="closeMyPhoneModal()">
                         ביטול
                     </button>
                 </div>

@@ -85,7 +85,8 @@ function makeDb() {
     }, 0);
 
     $pdo->exec("CREATE TABLE users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, email TEXT, is_active INTEGER DEFAULT 1)");
+        id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, email TEXT, is_active INTEGER DEFAULT 1,
+        phone TEXT DEFAULT NULL)");
 
     $pdo->exec("CREATE TABLE purchase_groups (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, description TEXT, owner_id INTEGER,
@@ -96,7 +97,8 @@ function makeDb() {
     $pdo->exec("CREATE TABLE group_members (
         id INTEGER PRIMARY KEY AUTOINCREMENT, group_id INTEGER, user_id INTEGER,
         nickname TEXT, email TEXT, participation_type TEXT, participation_value REAL,
-        is_active INTEGER DEFAULT 1, joined_at TEXT DEFAULT '2026-01-01')");
+        is_active INTEGER DEFAULT 1, joined_at TEXT DEFAULT '2026-01-01',
+        phone TEXT DEFAULT NULL)");
 
     $pdo->exec("CREATE TABLE group_purchases (
         id INTEGER PRIMARY KEY AUTOINCREMENT, group_id INTEGER, member_id INTEGER, user_id INTEGER,
@@ -477,6 +479,65 @@ $sdata = json_decode($rows[0]['data'] ?? '{}', true);
 check('העברת חוב אינה מנוסחת כתשלום',
     mb_strpos($sdata['title'] ?? '', 'חוב') !== false, $sdata['title'] ?? '');
 check('ומי שקיבל את החוב מקבל התראה', (int)$rows[0]['user_id'] === 3, $rows[0]['user_id'] ?? '');
+
+// ------------------------------------------------------------
+echo "\n8ד. מספרי טלפון\n";
+// ------------------------------------------------------------
+// המספר הזה מגיע לשני מקומות שאין בהם סליחה: קישור וואטסאפ
+// שנפתח אצל אדם אחר, ומספר שמודבק לתוך ביט. לכן ההרשאה צרה -
+// כל אחד ואת שלו - והמנהל, שהוא מי שהזמין את מי שאין לו חשבון.
+
+$pdoT = makeDb();
+
+// כל אחד מעדכן את המספר של עצמו
+$r = run($pdoT, 'setMyPhone', ['phone' => '050-123-4567'], 2, false, 2);
+check('משתתף שומר את המספר שלו', $r['success'] === true, $r['message'] ?? '');
+
+$saved = $pdoT->query("SELECT phone FROM group_members WHERE id = 2")->fetchColumn();
+check('המספר נשמר מנורמל', $saved === '0501234567', var_export($saved, true));
+
+$profile = $pdoT->query("SELECT phone FROM users WHERE id = 2")->fetchColumn();
+check('ונשמר גם בפרופיל, לאירועים הבאים', $profile === '0501234567', var_export($profile, true));
+
+// מספר פסול נדחה, ולא דורס את מה שכבר שמור
+$r = run($pdoT, 'setMyPhone', ['phone' => 'שלום'], 2, false, 2);
+check('מספר פסול נדחה', $r['success'] === false);
+check('והקיים לא נדרס',
+    $pdoT->query("SELECT phone FROM group_members WHERE id = 2")->fetchColumn() === '0501234567');
+
+// מחיקה מפורשת כן עוברת
+$r = run($pdoT, 'setMyPhone', ['phone' => ''], 2, false, 2);
+check('מספר ריק מוחק', $r['success'] === true);
+check('והעמודה התרוקנה',
+    $pdoT->query("SELECT phone FROM group_members WHERE id = 2")->fetchColumn() === null);
+
+// המנהל מעדכן מספר של משתתף אחר, יחד עם ההשתתפות
+$r = run($pdoT, 'editMember', [
+    'member_id' => 2, 'participation_type' => 'percentage',
+    'participation_value' => 25, 'phone' => '+972 52 765 4321',
+], 1, true, 1);
+check('המנהל שומר מספר של אחר', $r['success'] === true, $r['message'] ?? '');
+check('גם הוא מנורמל',
+    $pdoT->query("SELECT phone FROM group_members WHERE id = 2")->fetchColumn() === '+972527654321');
+
+// עריכה בלי שדה טלפון כלל - טופס ישן - אינה מוחקת אותו
+$r = run($pdoT, 'editMember', [
+    'member_id' => 2, 'participation_type' => 'percentage', 'participation_value' => 25,
+], 1, true, 1);
+check('עריכה בלי השדה אינה מוחקת', $r['success'] === true);
+check('המספר שרד',
+    $pdoT->query("SELECT phone FROM group_members WHERE id = 2")->fetchColumn() === '+972527654321');
+
+// מספר פסול בעריכה אינו מפיל את שאר השמירה
+$r = run($pdoT, 'editMember', [
+    'member_id' => 2, 'participation_type' => 'percentage',
+    'participation_value' => 20, 'phone' => 'abc',
+], 1, true, 1);
+check('ההשתתפות נשמרה למרות מספר פסול',
+    $r['success'] === true
+    && abs((float)$pdoT->query("SELECT participation_value FROM group_members WHERE id = 2")->fetchColumn() - 20) < 0.01);
+check('והמספר הקודם נשמר',
+    $pdoT->query("SELECT phone FROM group_members WHERE id = 2")->fetchColumn() === '+972527654321');
 
 // ------------------------------------------------------------
 echo "\n9. הסרת משתתף\n";

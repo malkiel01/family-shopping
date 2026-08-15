@@ -579,6 +579,23 @@ function migrationCatalog(PDO $pdo, $dbName) {
         ],
     ];
 
+    // --------------------------------------------------------
+    // מספר טלפון, כדי שאפשר יהיה לבקש תשלום בלי לצאת מהאפליקציה.
+    //
+    // שני מקומות ולא אחד: בפרופיל, כי זה המספר של האדם; ובאירוע,
+    // כי מי שהוזמן במייל ואין לו חשבון עדיין צריך גם הוא מספר,
+    // ומי שמכיר אותו הוא מנהל האירוע.
+    $catalog[] = [
+        'id'    => '014',
+        'title' => 'מספרי טלפון',
+        'steps' => [
+            stepAddColumn($pdo, $dbName, 'users', 'phone',
+                "`phone` VARCHAR(24) NULL DEFAULT NULL COMMENT 'לבקשות תשלום'"),
+            stepAddColumn($pdo, $dbName, 'group_members', 'phone',
+                "`phone` VARCHAR(24) NULL DEFAULT NULL COMMENT 'גובר על המספר שבפרופיל'"),
+        ],
+    ];
+
     return $catalog;
 }
 
