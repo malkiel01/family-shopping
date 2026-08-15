@@ -46,12 +46,46 @@ async function callAction(action, fields = {}, options = {}) {
     }
 }
 
-/** מבצע פעולה ומרענן את הדף בהצלחה */
+/**
+ * מבצע פעולה ומרענן את הדף בהצלחה.
+ *
+ * הנעילה כאן אינה זהירות יתר. כל פעולה כזו מסתיימת בטעינה מחדש,
+ * ולכן שתיים לעולם אינן אמורות לרוץ במקביל - אבל בין הלחיצה
+ * לטעינה יש כמה מאות מילישניות שבהן המסך עדיין מגיב. לחיצה
+ * שנייה על "שולם" בפרק הזמן הזה נרשמה כתשלום שני.
+ *
+ * הנעילה אינה משוחררת אחרי הצלחה: הדף ממילא נטען מחדש, ושחרור
+ * היה פותח בדיוק את החלון שנסגר כאן.
+ */
+let actionInFlight = false;
+
 async function callAndReload(action, fields = {}, options = {}) {
-    const data = await callAction(action, fields, options);
-    if (data) {
-        location.reload();
+    if (actionInFlight) {
+        return null;
     }
+    actionInFlight = true;
+
+    let data;
+    try {
+        data = await callAction(action, fields, options);
+    } catch (error) {
+        actionInFlight = false;
+        throw error;
+    }
+
+    if (!data) {
+        actionInFlight = false;
+        return null;
+    }
+
+    // השרת זיהה שהבקשה הזו כבר נרשמה. אומרים זאת, ולא בשקט:
+    // מי שהתכוון לשני תשלומים נפרדים צריך לדעת שנרשם אחד.
+    if (data.duplicate && data.message) {
+        alert(data.message);
+    }
+
+    location.reload();
+
     return data;
 }
 
@@ -413,6 +447,33 @@ function formatAmount(value) {
     return '₪' + Number(value).toFixed(2);
 }
 
+/**
+ * מנטרל את כפתור השליחה בזמן שהבקשה בדרך.
+ *
+ * הכפתור המנוטרל אינו ההגנה - היא בשרת - אלא ההסבר: בלעדיו
+ * הלחיצה נראית כאילו לא קרה דבר, וזו בדיוק הסיבה ללחוץ שוב.
+ */
+async function submitBusy(form, busyLabel, run) {
+    const button = form.querySelector('button[type="submit"]');
+    const label  = button ? button.innerHTML : '';
+
+    if (button) {
+        button.disabled  = true;
+        button.innerHTML = busyLabel;
+    }
+
+    try {
+        await run();
+    } finally {
+        // בהצלחה הדף נטען מחדש ממילא, וההחזרה כאן לא תיראה.
+        // בכישלון היא מה שמאפשר לנסות שוב.
+        if (button) {
+            button.disabled  = false;
+            button.innerHTML = label;
+        }
+    }
+}
+
 // --- רישום תשלום, מלא או חלקי ---
 
 function openSettleModal(fromMemberId, toMemberId, amount, partiesLabel) {
@@ -577,13 +638,13 @@ document.addEventListener('DOMContentLoaded', function () {
                 return;
             }
 
-            callAndReload('addSettlement', {
+            submitBusy(settleForm, 'רושם...', () => callAndReload('addSettlement', {
                 from_member_id: document.getElementById('settleFrom').value,
                 to_member_id: document.getElementById('settleTo').value,
                 amount: amount,
                 note: document.getElementById('settleNote').value,
                 type: 'payment'
-            });
+            }));
         });
     }
 
@@ -605,13 +666,13 @@ document.addEventListener('DOMContentLoaded', function () {
                 return;
             }
 
-            callAndReload('addSettlement', {
+            submitBusy(debtTransferForm, 'מעביר...', () => callAndReload('addSettlement', {
                 from_member_id: document.getElementById('debtFrom').value,
                 to_member_id: select.value,
                 amount: amount,
                 note: document.getElementById('debtNote').value,
                 type: 'transfer'
-            });
+            }));
         });
     }
 

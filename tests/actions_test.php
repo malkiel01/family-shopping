@@ -310,6 +310,43 @@ check('סכום אפס נדחה', $r['success'] === false);
 $r = run($pdo, 'addSettlement', ['from_member_id' => 2, 'to_member_id' => 99, 'amount' => 10], 1, true, 1);
 check('משתתף לא קיים נדחה', $r['success'] === false);
 
+// --- לחיצה כפולה על "שולם" ---
+//
+// דווח משדה: לחיצה פעמיים ברצף על אותו כפתור יצרה שני תשלומים,
+// ומכיוון שיחד הם עדיין היו קטנים מהחוב, גם נשאר חוב פתוח. זה
+// נראה כמו שתי תקלות נפרדות - "נרשם כפול" ו"לא קוזז" - וזו אחת.
+//
+// הבדיקה מזיזה את החותמת של הרישום הראשון לזמן אמת, כי במסד
+// הבדיקות היא ברירת מחדל קבועה בעבר.
+$pdo->exec("UPDATE settlements SET created_at = datetime('now') WHERE id = $settlementId");
+
+$before = (int)$pdo->query("SELECT COUNT(*) FROM settlements")->fetchColumn();
+$r = run($pdo, 'addSettlement', ['from_member_id' => 2, 'to_member_id' => 1, 'amount' => 100], 2, false, 2);
+$after  = (int)$pdo->query("SELECT COUNT(*) FROM settlements")->fetchColumn();
+
+check('לחיצה כפולה אינה יוצרת רישום שני', $after === $before, "$before -> $after");
+check('והתשובה מסומנת ככפילות', !empty($r['duplicate']));
+check('אך אינה כישלון - הפעולה בוצעה פעם אחת', $r['success'] === true);
+check('ומחזירה את ההתחשבנות הקיימת', (int)$r['settlement_id'] === (int)$settlementId);
+
+// סכום אחר בין אותם צדדים הוא תשלום אחר, ולא לחיצה כפולה
+$r = run($pdo, 'addSettlement', ['from_member_id' => 2, 'to_member_id' => 1, 'amount' => 30], 2, false, 2);
+check('סכום שונה נרשם כרגיל', $r['success'] === true && empty($r['duplicate']));
+check('ואכן נוצרה רשומה',
+    (int)$pdo->query("SELECT COUNT(*) FROM settlements")->fetchColumn() === $before + 1);
+$pdo->exec("DELETE FROM settlements WHERE amount = 30");
+
+// אותו סכום בכיוון ההפוך אינו כפילות
+$r = run($pdo, 'addSettlement', ['from_member_id' => 1, 'to_member_id' => 2, 'amount' => 100], 1, true, 1);
+check('כיוון הפוך נרשם כרגיל', $r['success'] === true && empty($r['duplicate']));
+$pdo->exec("DELETE FROM settlements WHERE from_member_id = 1 AND to_member_id = 2");
+
+// רישום ישן אינו חוסם תשלום חדש באותו סכום
+$pdo->exec("UPDATE settlements SET created_at = '2020-01-01' WHERE id = $settlementId");
+$r = run($pdo, 'addSettlement', ['from_member_id' => 2, 'to_member_id' => 1, 'amount' => 100], 2, false, 2);
+check('תשלום זהה מלפני זמן רב אינו נחסם', $r['success'] === true && empty($r['duplicate']));
+$pdo->exec("DELETE FROM settlements WHERE id != $settlementId");
+
 $r = run($pdo, 'deleteSettlement', ['settlement_id' => $settlementId], 3, false, 3);
 check('צד שלישי לא מבטל התחשבנות', $r['success'] === false);
 
