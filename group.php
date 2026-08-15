@@ -64,11 +64,19 @@ require_once 'includes/contacts.php';
 $myContacts = $is_owner ? listContacts($pdo, $user_id) : [];
 
 // --- משתתפים ---
+// עמודות הטלפון נוספו במיגרציה 014, ולכן הן נבחרות רק אחרי
+// שנבדק שהן קיימות. בלי הבדיקה כל המסך קורס בשרת שלא עודכן.
+$phonesReady = phoneFieldsReady($pdo);
+$phoneSelect = $phonesReady
+    ? ", u.phone AS user_phone"
+    : ", NULL AS user_phone, NULL AS phone";
+
 $stmt = $pdo->prepare("
     SELECT gm.*,
            COALESCE(u.name, gm.nickname) AS user_name,
            u.profile_picture,
            COALESCE(u.email, gm.email) AS email
+           $phoneSelect
     FROM group_members gm
     LEFT JOIN users u ON gm.user_id = u.id
     WHERE gm.group_id = ? AND gm.is_active = 1
@@ -76,6 +84,15 @@ $stmt = $pdo->prepare("
 ");
 $stmt->execute([$group_id]);
 $members = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// המספר של המשתמש עצמו, למסך "המספר שלי"
+$myPhone = '';
+foreach ($members as $member) {
+    if ((int)$member['id'] === $member_id) {
+        $myPhone = memberPhone($member);
+        break;
+    }
+}
 
 // --- סך ההשתתפות ---
 $totalPercentage = 0.0;
@@ -480,6 +497,27 @@ $canEdit = !$is_closed;
                     <div class="member-info">
                         <h3><?php echo htmlspecialchars($member['nickname']); ?></h3>
                         <p class="member-email"><?php echo htmlspecialchars($member['email']); ?></p>
+                        <?php
+                        // הטלפון מוצג למשתתפי האירוע בלבד, וזו כל הנקודה:
+                        // בלעדיו אי אפשר לבקש תשלום או להעביר בביט
+                        $cardPhone = $phonesReady ? memberPhone($member) : '';
+                        $isMe      = ((int)$member['id'] === $member_id);
+                        ?>
+                        <?php if ($cardPhone !== ''): ?>
+                        <p class="member-phone">
+                            <i class="fas fa-phone"></i>
+                            <?php echo htmlspecialchars(formatPhone($cardPhone)); ?>
+                            <?php if ($isMe && $phonesReady): ?>
+                            <button type="button" class="btn-link" onclick="openMyPhoneModal()">שינוי</button>
+                            <?php endif; ?>
+                        </p>
+                        <?php elseif ($isMe && $phonesReady): ?>
+                        <p class="member-phone missing">
+                            <button type="button" class="btn-link" onclick="openMyPhoneModal()">
+                                <i class="fas fa-phone"></i> הוסף את המספר שלך
+                            </button>
+                        </p>
+                        <?php endif; ?>
                         <p class="member-participation">
                             <?php if ($member['participation_type'] === 'shares'): ?>
                                 <span class="shares-badge">
@@ -506,7 +544,7 @@ $canEdit = !$is_closed;
                     <?php if ($is_owner && $canEdit): ?>
                     <div class="member-actions">
                         <button class="btn-edit" title="ערוך"
-                                onclick="editMember(<?php echo (int)$member['id']; ?>, '<?php echo htmlspecialchars($member['participation_type'], ENT_QUOTES); ?>', <?php echo (float)$member['participation_value']; ?>)">
+                                onclick="editMember(<?php echo (int)$member['id']; ?>, '<?php echo htmlspecialchars($member['participation_type'], ENT_QUOTES); ?>', <?php echo (float)$member['participation_value']; ?>, <?php echo htmlspecialchars(json_encode(formatPhone($cardPhone), JSON_UNESCAPED_UNICODE), ENT_QUOTES); ?>)">
                             <i class="fas fa-edit"></i>
                         </button>
                         <?php // את המנהל אי אפשר להסיר מהאירוע שלו, אבל כן אפשר לערוך את חלקו ?>
@@ -661,7 +699,11 @@ $canEdit = !$is_closed;
                     <i class="fab fa-whatsapp"></i> שתף
                 </button>
             </div>
-            <?php echo renderCalculationsView($members, $balance, $featuresReady, $settlements); ?>
+            <?php echo renderCalculationsView($members, $balance, $featuresReady, $settlements, [
+                'viewer_member_id' => $member_id,
+                'is_owner'         => $is_owner,
+                'group_name'       => $group['name'],
+            ]); ?>
         </div>
     </div>
 
@@ -681,6 +723,9 @@ $canEdit = !$is_closed;
     }
     renderAddPurchaseModal($members, $is_owner, $member_id, $featuresReady);
     renderImageModal();
+    if ($phonesReady) {
+        renderMyPhoneModal($myPhone);
+    }
     ?>
 
     <script>

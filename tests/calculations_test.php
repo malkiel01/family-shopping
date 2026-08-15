@@ -518,5 +518,73 @@ unset($history[0]['note']);
 $html = renderCalculationsView($mN, $rN, true, $history);
 check('היעדר המפתח אינו שובר את המסך', mb_strpos($html, 'settlement-row') !== false ? 1 : 0, 1);
 
+// ============================================================
+echo "\n17. כפתורי התשלום\n";
+// ============================================================
+// מי שחייב רוצה את המספר של המקבל, כדי לפתוח את ביט. מי שמגיע
+// לו רוצה לשלוח תזכורת. שני צרכים הפוכים, ולכן כל אחד רואה את
+// שלו בלבד - כפתור שאינו שייך לך הוא רעש, ובטלפון גם מקום.
+//
+// חשוב מזה: מספר טלפון של משתתף לא אמור להגיע למסך של מי שאין
+// לו סיבה לראות אותו.
+
+$mP = [
+    ['id'=>1,'nickname'=>'חייב','participation_type'=>'percentage','participation_value'=>50,
+     'phone'=>'0501111111'],
+    ['id'=>2,'nickname'=>'זכאי','participation_type'=>'percentage','participation_value'=>50,
+     'phone'=>'0502222222'],
+];
+$pP = [['id'=>1,'member_id'=>2,'amount'=>200,'excluded_ids'=>[]]];
+$rP = calculateGroupBalance($mP, $pP);
+
+// החייב הוא 1, הזכאי הוא 2
+check('החוב בכיוון הצפוי', $rP['transfers'][0]['from_id'], 1);
+
+$opts = ['group_name' => 'אירוע'];
+
+// --- מבט של החייב ---
+$html = renderCalculationsView($mP, $rP, true, [],
+    array_merge($opts, ['viewer_member_id' => 1]));
+check('החייב רואה כפתור העתקה לביט', mb_strpos($html, 'btn-bit') !== false ? 1 : 0, 1);
+check('ומקבל את המספר של הזכאי',    mb_strpos($html, '0502222222') !== false ? 1 : 0, 1);
+check('הוא אינו רואה בקשת תשלום',   mb_strpos($html, 'btn-request') !== false ? 0 : 1, 1);
+check('והמספר שלו עצמו אינו נחוץ שם', mb_strpos($html, '0501111111') !== false ? 0 : 1, 1);
+
+// --- מבט של הזכאי ---
+$html = renderCalculationsView($mP, $rP, true, [],
+    array_merge($opts, ['viewer_member_id' => 2]));
+check('הזכאי רואה בקשת תשלום',       mb_strpos($html, 'btn-request') !== false ? 1 : 0, 1);
+check('הקישור פונה למספר של החייב',  mb_strpos($html, 'wa.me/972501111111') !== false ? 1 : 0, 1);
+check('הוא אינו רואה העתקה לביט',    mb_strpos($html, 'btn-bit') !== false ? 0 : 1, 1);
+
+// --- מבט של מי שאינו צד ---
+$mP[] = ['id'=>3,'nickname'=>'צופה','participation_type'=>'fixed','participation_value'=>0,
+         'phone'=>'0503333333'];
+$rP2  = calculateGroupBalance($mP, $pP);
+$html = renderCalculationsView($mP, $rP2, true, [],
+    array_merge($opts, ['viewer_member_id' => 3]));
+check('משתתף שאינו צד אינו רואה כפתורים',
+    (mb_strpos($html, 'btn-bit') !== false || mb_strpos($html, 'btn-request') !== false) ? 0 : 1, 1);
+
+// --- בלי מספרים אין כפתורים ---
+$mNo = [
+    ['id'=>1,'nickname'=>'חייב','participation_type'=>'percentage','participation_value'=>50],
+    ['id'=>2,'nickname'=>'זכאי','participation_type'=>'percentage','participation_value'=>50],
+];
+$rNo  = calculateGroupBalance($mNo, $pP);
+$html = renderCalculationsView($mNo, $rNo, true, [],
+    array_merge($opts, ['viewer_member_id' => 1]));
+check('בלי מספר אין כפתור ביט', mb_strpos($html, 'btn-bit') !== false ? 0 : 1, 1);
+
+$html = renderCalculationsView($mNo, $rNo, true, [],
+    array_merge($opts, ['viewer_member_id' => 2]));
+check('בלי מספר אין בקשת תשלום', mb_strpos($html, 'btn-request') !== false ? 0 : 1, 1);
+
+// --- קריאה בלי options כלל: המסך הישן, בלי כפתורים ---
+$html = renderCalculationsView($mP, $rP2, true);
+check('קריאה ישנה אינה שוברת דבר',  mb_strpos($html, 'transfer-card') !== false ? 1 : 0, 1);
+check('ואינה מדליפה מספרים',
+    (mb_strpos($html, '0501111111') !== false || mb_strpos($html, '0502222222') !== false) ? 0 : 1, 1);
+
 echo "\n" . str_repeat('=',50) . "\nעבר: $pass | נכשל: $fail\n";
 exit($fail > 0 ? 1 : 0);

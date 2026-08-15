@@ -2098,3 +2098,71 @@ body {
     font-size: 11px;
     font-weight: 700;
 }
+
+/* ============================================================
+   טלפון ובקשות תשלום
+   ============================================================ */
+
+.member-phone {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 2px;
+    color: #667eea;
+    font-size: 13px;
+    direction: ltr;
+    justify-content: flex-end;
+}
+
+.member-phone i { font-size: 11px; }
+
+.member-phone.missing {
+    color: #9aa0b0;
+}
+
+.member-phone .btn-link {
+    font-size: 12px;
+    padding: 0;
+}
+
+/*
+   שורה משלהם מתחת לסכום: בטלפון הם לא נכנסים לצד "שולם"
+   ו"העבר חוב" בלי לדחוס את כולם עד שאי אפשר ללחוץ.
+*/
+.transfer-pay {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed #e8eaf2;
+}
+
+.btn-bit,
+.btn-request {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 12px;
+    border: none;
+    border-radius: 8px;
+    font-size: 12.5px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    text-decoration: none;
+    transition: filter 0.15s;
+}
+
+.btn-bit {
+    background: #eef0fb;
+    color: #4a51c9;
+}
+
+.btn-request {
+    background: #25d366;
+    color: #fff;
+}
+
+.btn-bit:hover,
+.btn-request:hover { filter: brightness(0.95); }
