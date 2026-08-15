@@ -485,12 +485,29 @@ function renderCalculationsView(array $members, array $result, $canSettle, array
     </div>
 
     <div class="transfers-section">
-        <h3>העברות נדרשות:</h3>
+        <?php
+        // הכותרת נושאת מספר וסכום בכוונה. בלעדיהם אי אפשר לדעת
+        // אם מה שרואים על המסך הוא מה שהשרת שלח - צילום מסך
+        // מתגלגל בטלפון עלול לשכפל רצועה, ואז שתי שורות זהות
+        // נראות כמו תקלה בחישוב. המספור מכריע את השאלה מיד.
+        $transferTotal = 0.0;
+        foreach ($result['transfers'] as $transfer) {
+            $transferTotal += (float)$transfer['amount'];
+        }
+        ?>
+        <h3>
+            העברות נדרשות:
+            <span class="transfers-count"><?php echo count($result['transfers']); ?></span>
+        </h3>
         <?php if (count($result['transfers']) > 0): ?>
-            <?php foreach ($result['transfers'] as $transfer): ?>
+            <p class="transfers-total">
+                סך הכל להעברה: <strong>₪<?php echo number_format($transferTotal, 2); ?></strong>
+            </p>
+            <?php foreach ($result['transfers'] as $index => $transfer): ?>
             <?php // שתי שורות ולא ארבעה פריטים בשורה אחת: בטלפון הם
                   // נמעכו עד שהסכום דרס את השמות והכפתור יצא מהכרטיס ?>
             <div class="transfer-card">
+                <span class="transfer-index"><?php echo $index + 1; ?></span>
                 <div class="transfer-parties">
                     <span class="transfer-person">
                         <i class="fas fa-user"></i>
