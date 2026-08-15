@@ -476,5 +476,47 @@ check('אף שורה לא גדלה אחרי תשלום', $violations, 0);
 check('אף שורה לא נעלמה בלי ששולמה', $reshuffles, 0);
 printf("  (%d תרחישים אקראיים)\n", $rounds);
 
+// ============================================================
+echo "\n16. ההערה מוצגת ברשימת ההתחשבנויות\n";
+// ============================================================
+// ההערה נשמרה מאז ומעולם לא הוצגה. "ביט" או "חלק ראשון" הם בדיוק
+// מה שמאפשר לזהות תשלום חודש אחרי, ובלעדיהם נשארים עם תאריך
+// וסכום בלבד.
+
+$mN = [member(1,'א','percentage',50), member(2,'ב','percentage',50)];
+$pN = [['id'=>1,'member_id'=>1,'amount'=>200,'excluded_ids'=>[]]];
+$sN = [['from_member_id'=>2,'to_member_id'=>1,'amount'=>100]];
+$rN = calculateGroupBalance($mN, $pN, $sN);
+
+$history = [[
+    'id'            => 7,
+    'from_nickname' => 'ב',
+    'to_nickname'   => 'א',
+    'amount'        => 100,
+    'created_at'    => '2026-08-15 10:00:00',
+    'note'          => 'ביט',
+    'type'          => 'payment',
+]];
+
+$html = renderCalculationsView($mN, $rN, true, $history);
+check('ההערה מופיעה במסך', mb_strpos($html, 'ביט') !== false ? 1 : 0, 1);
+check('ובתוך אלמנט משלה', mb_strpos($html, 'settlement-note') !== false ? 1 : 0, 1);
+
+// הערה עם תווי HTML אינה הופכת לתגית
+$history[0]['note'] = '<b>ביט</b>';
+$html = renderCalculationsView($mN, $rN, true, $history);
+check('הערה עם HTML מנוטרלת', mb_strpos($html, '<b>ביט</b>') !== false ? 0 : 1, 1);
+check('אך התוכן עצמו נשמר', mb_strpos($html, 'ביט') !== false ? 1 : 0, 1);
+
+// בלי הערה אין שורה ריקה
+$history[0]['note'] = '   ';
+$html = renderCalculationsView($mN, $rN, true, $history);
+check('הערה ריקה אינה מייצרת שורה', mb_strpos($html, 'settlement-note') !== false ? 0 : 1, 1);
+
+// והיעדר המפתח לגמרי - שרת שהעמודה עוד לא קיימת בו
+unset($history[0]['note']);
+$html = renderCalculationsView($mN, $rN, true, $history);
+check('היעדר המפתח אינו שובר את המסך', mb_strpos($html, 'settlement-row') !== false ? 1 : 0, 1);
+
 echo "\n" . str_repeat('=',50) . "\nעבר: $pass | נכשל: $fail\n";
 exit($fail > 0 ? 1 : 0);

@@ -1182,6 +1182,73 @@ function findRecentSettlement(GroupContext $context, $fromMemberId, $toMemberId,
     return $id === false ? null : (int)$id;
 }
 
+/**
+ * נוסח ההתראה לכל אחד משני הצדדים.
+ *
+ * מי שקיבל את הכסף צריך לדעת שסומן שקיבל - זו ההזדמנות שלו לומר
+ * "רגע, לא קיבלתי". לכן הניסוח פונה אליו ישירות, ומזכיר את שם מי
+ * ששילם ואת ההערה שנרשמה. הערה כמו "ביט" או "חלק ראשון" היא
+ * לרוב כל ההסבר שדרוש כדי לזהות את התשלום.
+ *
+ * כשהמשלם עצמו רשם את התשלום אין טעם לחזור על שמו פעמיים
+ * ("שמואל סימן ששמואל שילם לך"), ולכן הניסוח מתקצר.
+ */
+function settlementMessages(GroupContext $context, $fromMemberId, $toMemberId,
+                            $amount, $note, $isTransfer) {
+
+    $names = [];
+    try {
+        $stmt = $context->pdo->prepare("
+            SELECT id, nickname FROM group_members WHERE id IN (?, ?) AND group_id = ?
+        ");
+        $stmt->execute([$fromMemberId, $toMemberId, $context->groupId]);
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $names[(int)$row['id']] = (string)$row['nickname'];
+        }
+    } catch (Exception $e) {
+        error_log('settlement names lookup failed: ' . $e->getMessage());
+    }
+
+    $fromName = isset($names[$fromMemberId]) ? $names[$fromMemberId] : 'משתתף';
+    $toName   = isset($names[$toMemberId])   ? $names[$toMemberId]   : 'משתתף';
+
+    $sum    = currencySymbol() . number_format($amount, 2);
+    $group  = groupDisplayName($context);
+    $actor  = actorName();
+    $tail   = ' ב"' . $group . '"' . ($note !== '' ? ' — ' . $note : '');
+
+    // האם מי שרשם הוא המשלם עצמו
+    $actorIsPayer = ((int)$context->memberId === (int)$fromMemberId);
+
+    if ($isTransfer) {
+        return [
+            'to' => [
+                'title' => 'חוב הועבר אליך',
+                'body'  => $actor . ' העביר אליך חוב של ' . $sum
+                    . ' מ' . $fromName . $tail,
+            ],
+            'from' => [
+                'title' => 'החוב שלך הועבר',
+                'body'  => $actor . ' העביר חוב של ' . $sum
+                    . ' משמך אל ' . $toName . $tail,
+            ],
+        ];
+    }
+
+    return [
+        'to' => [
+            'title' => 'סומן שקיבלת תשלום',
+            'body'  => $actorIsPayer
+                ? $actor . ' סימן ששילם לך ' . $sum . $tail
+                : $actor . ' סימן ש' . $fromName . ' שילם לך ' . $sum . $tail,
+        ],
+        'from' => [
+            'title' => 'נרשם שהעברת תשלום',
+            'body'  => $actor . ' סימן ששילמת ' . $sum . ' ל' . $toName . $tail,
+        ],
+    ];
+}
+
 function actionAddSettlement(GroupContext $context) {
     $fromMemberId = intval($_POST['from_member_id'] ?? 0);
     $toMemberId   = intval($_POST['to_member_id'] ?? 0);
@@ -1285,18 +1352,15 @@ function actionAddSettlement(GroupContext $context) {
         }
     );
 
-    // שני הצדדים מקבלים הודעה, גם אם מישהו אחר רשם אותה
-    $symbol = currencySymbol();
-    $sum    = $symbol . number_format($amount, 2);
-    $body   = $isTransfer
-        ? actorName() . ' העביר חוב של ' . $sum . ' ב"' . groupDisplayName($context) . '"'
-        : actorName() . ' רשם העברה של ' . $sum . ' ב"' . groupDisplayName($context) . '"';
+    // שני הצדדים מקבלים הודעה, גם אם מישהו אחר רשם אותה - וכל אחד
+    // מקבל את שלו. "התחשבנות נרשמה" זהה לשניהם לא אומר למי שקיבל
+    // את הכסף את הדבר היחיד שמעניין אותו: שסומן שהוא קיבל.
+    $messages = settlementMessages($context, $fromMemberId, $toMemberId, $amount, $note, $isTransfer);
 
-    $title = $isTransfer ? 'חוב הועבר' : 'התחשבנות נרשמה';
-
-    foreach ([$fromMemberId, $toMemberId] as $party) {
-        notifyMember($context, $party, 'settlement', $title, $body);
-    }
+    notifyMember($context, $toMemberId,   'settlement',
+        $messages['to']['title'],   $messages['to']['body']);
+    notifyMember($context, $fromMemberId, 'settlement',
+        $messages['from']['title'], $messages['from']['body']);
 
     jsonOk(['settlement_id' => $settlementId]);
 }

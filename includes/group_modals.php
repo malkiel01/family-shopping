@@ -494,6 +494,10 @@ function renderSettleModal() {
                     <label for="settleNote">הערה (לא חובה):</label>
                     <input type="text" id="settleNote" maxlength="255"
                            placeholder="למשל: ביט, מזומן, חלק ראשון">
+                    <small class="form-hint">
+                        תופיע ברשימת ההתחשבנויות, וגם בהתראה שנשלחת למי שסומן
+                        שקיבל את התשלום
+                    </small>
                 </div>
 
                 <div class="modal-actions">
@@ -558,6 +562,10 @@ function renderDebtTransferModal($members) {
                     <label for="debtNote">הערה (לא חובה):</label>
                     <input type="text" id="debtNote" maxlength="255"
                            placeholder="למשל: סוכם ביניהם">
+                    <small class="form-hint">
+                        תופיע ברשימת ההתחשבנויות, וגם בהתראה שנשלחת למי שלוקח
+                        על עצמו את החוב
+                    </small>
                 </div>
 
                 <p class="form-hint">

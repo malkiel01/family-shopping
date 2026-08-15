@@ -417,6 +417,68 @@ $pdata = json_decode($rows[0]['data'] ?? '{}', true);
 check('גוף ההתראה כולל את הסכום', !empty($pdata['body']) && mb_strpos($pdata['body'], '90') !== false);
 
 // ------------------------------------------------------------
+echo "\n8ג. התראה על תשלום שסומן\n";
+// ------------------------------------------------------------
+// מי שקיבל את הכסף צריך לדעת שסומן שקיבל - זו ההזדמנות שלו לומר
+// "רגע, לא קיבלתי". נוסח זהה לשני הצדדים אינו אומר לו את זה.
+
+$pdoS = makeDb();
+$pdoS->exec("DELETE FROM notification_queue");
+
+// המנהל (משתמש 1, חבר 1) מסמן שחבר 2 שילם לו, עם הערה
+run($pdoS, 'addSettlement', [
+    'from_member_id' => 2, 'to_member_id' => 1,
+    'amount' => 120, 'note' => 'ביט',
+], 1, true, 1);
+
+$rows = $pdoS->query("SELECT * FROM notification_queue WHERE type = 'settlement'")->fetchAll(PDO::FETCH_ASSOC);
+check('רק הצד השני מקבל התראה', count($rows) === 1, 'נשלחו: ' . count($rows));
+check('והיא נשלחת למשלם', (int)$rows[0]['user_id'] === 2, $rows[0]['user_id'] ?? '');
+
+$sdata = json_decode($rows[0]['data'] ?? '{}', true);
+check('הכותרת מדברת על תשלום שנרשם',
+    mb_strpos($sdata['title'] ?? '', 'העברת') !== false, $sdata['title'] ?? '');
+check('הגוף כולל את הסכום',
+    mb_strpos($sdata['body'] ?? '', '120') !== false, $sdata['body'] ?? '');
+check('הגוף כולל את ההערה',
+    mb_strpos($sdata['body'] ?? '', 'ביט') !== false, $sdata['body'] ?? '');
+check('הגוף כולל את שם המקבל',
+    mb_strpos($sdata['body'] ?? '', 'דנה') !== false, $sdata['body'] ?? '');
+
+// עכשיו הפוך: המשלם עצמו מסמן ששילם, והמקבל הוא שמקבל התראה
+$pdoS->exec("DELETE FROM notification_queue");
+run($pdoS, 'addSettlement', [
+    'from_member_id' => 2, 'to_member_id' => 1,
+    'amount' => 55, 'note' => 'מזומן',
+], 2, false, 2);
+
+$rows  = $pdoS->query("SELECT * FROM notification_queue WHERE type = 'settlement'")->fetchAll(PDO::FETCH_ASSOC);
+$sdata = json_decode($rows[0]['data'] ?? '{}', true);
+
+check('ההתראה נשלחת למי שקיבל את הכסף', (int)$rows[0]['user_id'] === 1, $rows[0]['user_id'] ?? '');
+check('והכותרת אומרת שסומן שקיבל',
+    mb_strpos($sdata['title'] ?? '', 'קיבלת') !== false, $sdata['title'] ?? '');
+check('הניסוח פונה אליו ישירות',
+    mb_strpos($sdata['body'] ?? '', 'שילם לך') !== false, $sdata['body'] ?? '');
+check('ההערה מופיעה גם כאן',
+    mb_strpos($sdata['body'] ?? '', 'מזומן') !== false, $sdata['body'] ?? '');
+check('ואין כפילות בשם המשלם',
+    mb_substr_count($sdata['body'] ?? '', 'רון') <= 1, $sdata['body'] ?? '');
+
+// העברת חוב מנוסחת אחרת מתשלום
+$pdoS->exec("DELETE FROM notification_queue");
+run($pdoS, 'addSettlement', [
+    'from_member_id' => 2, 'to_member_id' => 3,
+    'amount' => 40, 'type' => 'transfer',
+], 2, false, 2);
+
+$rows  = $pdoS->query("SELECT * FROM notification_queue WHERE type = 'settlement'")->fetchAll(PDO::FETCH_ASSOC);
+$sdata = json_decode($rows[0]['data'] ?? '{}', true);
+check('העברת חוב אינה מנוסחת כתשלום',
+    mb_strpos($sdata['title'] ?? '', 'חוב') !== false, $sdata['title'] ?? '');
+check('ומי שקיבל את החוב מקבל התראה', (int)$rows[0]['user_id'] === 3, $rows[0]['user_id'] ?? '');
+
+// ------------------------------------------------------------
 echo "\n9. הסרת משתתף\n";
 // ------------------------------------------------------------
 $pdo2 = makeDb();

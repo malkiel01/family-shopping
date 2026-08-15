@@ -661,7 +661,10 @@ function renderCalculationsView(array $members, array $result, $canSettle, array
     <div class="settlements-section">
         <h3>התחשבנויות שבוצעו:</h3>
         <?php foreach ($settlementHistory as $settlement): ?>
-        <?php $isTransfer = (($settlement['type'] ?? 'payment') === 'transfer'); ?>
+        <?php
+        $isTransfer = (($settlement['type'] ?? 'payment') === 'transfer');
+        $note       = trim((string)($settlement['note'] ?? ''));
+        ?>
         <div class="settlement-row<?php echo $isTransfer ? ' is-transfer' : ''; ?>">
             <span class="settlement-parties">
                 <?php echo htmlspecialchars($settlement['from_nickname']); ?>
@@ -679,6 +682,15 @@ function renderCalculationsView(array $members, array $result, $canSettle, array
                     onclick="deleteSettlement(<?php echo (int)$settlement['id']; ?>)">
                 <i class="fas fa-undo"></i>
             </button>
+            <?php endif; ?>
+            <?php if ($note !== ''): ?>
+            <?php // ההערה נשמרה מאז ומעולם לא הוצגה. "ביט", "מזומן",
+                  // "חלק ראשון" - זה בדיוק מה שמאפשר לזהות תשלום
+                  // חודש אחרי, ובלעדיו נשארים עם תאריך וסכום בלבד ?>
+            <span class="settlement-note">
+                <i class="fas fa-quote-right"></i>
+                <?php echo htmlspecialchars($note); ?>
+            </span>
             <?php endif; ?>
         </div>
         <?php endforeach; ?>
