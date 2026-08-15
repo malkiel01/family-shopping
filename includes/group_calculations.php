@@ -305,6 +305,25 @@ function calculateGroupBalance(array $members, array $purchases, array $settleme
 /**
  * מייצר את רשימת ההעברות המינימלית לאיזון החשבון.
  * חמדני: מי שהכי חייב משלם למי שהכי מגיע לו.
+ *
+ * ---------------------------------------------------------------
+ * למה הסדר נקבע לפי המאזן הגולמי ולא לפי הפתוח
+ * ---------------------------------------------------------------
+ * החלוקה החמדנית תלויה בסדר: מי ראשון בתור מקבל את השורה הגדולה.
+ * כשהסדר נגזר מהמאזן הפתוח, כל תשלום מזיז את מי ששילם אחורה בתור
+ * וכל התוכנית נבנית מחדש - עם אותם סכומים, אבל בין אנשים אחרים.
+ *
+ * זה מה שקרה באירוע אמיתי: שמואל היה חייב 159.26 למלכיאל ו-132.16
+ * לחלילי. הוא שילם לחלילי את ה-132.16, ירד למקום השלישי בתור,
+ * ויוסף חיים תפס את מקומו מול מלכיאל. התוצאה על המסך: שמואל שילם
+ * לחלילי, ומיד אחר כך חייב לחלילי 159.26 - יותר ממה ששילם. הסכום
+ * הכולל היה נכון לחלוטין, וזה בדיוק מה שהפך את זה לבלתי מובן.
+ *
+ * המאזן הגולמי - מה שכל אחד הוציא מול מה שהיה צריך - אינו משתנה
+ * כשמישהו משלם. הוא נקבע מהקניות בלבד. לכן כשהוא קובע את הסדר,
+ * התור קפוא: תשלום רק מקטין שורה או מוחק אותה, ואף שורה אחרת לא
+ * זזה. לפני ההתחשבנות הראשונה שני המאזנים שווים, ולכן באירוע חדש
+ * התוצאה זהה לחלוטין למה שהייתה קודם.
  */
 function calculateTransfers(array $calculations) {
     $creditors = [];
@@ -313,15 +332,37 @@ function calculateTransfers(array $calculations) {
     foreach ($calculations as $calculation) {
         $balance = round($calculation['openBalance'], 2);
 
+        // עוגן הסדר. בהיעדר מאזן גולמי - הפתוח, כדי שקוד שקורא
+        // לפונקציה עם רשימה מצומצמת ימשיך לעבוד כמו קודם.
+        $anchor = round(isset($calculation['balance']) ? $calculation['balance'] : $balance, 2);
+
         if ($balance > 0.01) {
-            $creditors[] = ['member' => $calculation['member'], 'balance' => $balance];
+            $creditors[] = [
+                'member'  => $calculation['member'],
+                'balance' => $balance,
+                'anchor'  => $anchor,
+            ];
         } elseif ($balance < -0.01) {
-            $debtors[] = ['member' => $calculation['member'], 'balance' => abs($balance)];
+            $debtors[] = [
+                'member'  => $calculation['member'],
+                'balance' => abs($balance),
+                'anchor'  => -$anchor,
+            ];
         }
     }
 
-    usort($creditors, function ($a, $b) { return $b['balance'] <=> $a['balance']; });
-    usort($debtors,   function ($a, $b) { return $b['balance'] <=> $a['balance']; });
+    // שוויון נשבר לפי מזהה ולא לפי סדר הרשימה: שני משתתפים עם
+    // אותו מאזן בדיוק היו מתחלפים ביניהם בכל טעינה
+    $order = function ($a, $b) {
+        if (abs($a['anchor'] - $b['anchor']) > 0.005) {
+            return $b['anchor'] <=> $a['anchor'];
+        }
+
+        return (int)$a['member']['id'] <=> (int)$b['member']['id'];
+    };
+
+    usort($creditors, $order);
+    usort($debtors,   $order);
 
     $transfers     = [];
     $creditorIndex = 0;
