@@ -918,3 +918,44 @@
         flex: 1;
     }
 }
+
+/* ============================================================
+   דיבוג חישובים
+   ============================================================ */
+
+.admin-inline-warning {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: #fff6e5;
+    color: #8a5b00;
+    font-size: 12.5px;
+    line-height: 1.5;
+}
+
+/*
+   הדוח הוא טקסט שנועד להיות מועתק ומודבק, ולכן הוא נשאר טקסט:
+   ללא גלישה מחדש, ללא עיצוב שיאבד בהדבקה, ובגובה קבוע כדי שהוא
+   לא ידחוף את כפתור ההעתקה אל מחוץ למסך.
+*/
+.admin-debug-report {
+    margin-top: 12px;
+    padding: 12px;
+    max-height: 420px;
+    overflow: auto;
+    border-radius: 10px;
+    background: #1f2333;
+    color: #dfe3f0;
+    font-family: 'Courier New', monospace;
+    font-size: 11.5px;
+    line-height: 1.65;
+    white-space: pre;
+    direction: ltr;
+    text-align: left;
+    unicode-bidi: plaintext;
+    -webkit-user-select: all;
+    user-select: all;
+}

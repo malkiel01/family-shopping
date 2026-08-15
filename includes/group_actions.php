@@ -8,6 +8,7 @@ require_once __DIR__ . '/upload.php';
 require_once __DIR__ . '/notifications.php';
 require_once __DIR__ . '/participation.php';
 require_once __DIR__ . '/contacts.php';
+require_once __DIR__ . '/debug_log.php';
 
 /**
  * הקשר הבקשה - נשמר פעם אחת כדי שכל פונקציה תדע
@@ -1175,29 +1176,44 @@ function actionAddSettlement(GroupContext $context) {
     // כהתחשבנות רגילה - המאזן יוצא נכון, רק ההבחנה חסרה.
     $hasType = settlementTypesReady($context->pdo);
 
-    if ($hasType) {
-        $stmt = $context->pdo->prepare("
-            INSERT INTO settlements (group_id, from_member_id, to_member_id, amount, note, created_by, type)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ");
-        $stmt->execute([
-            $context->groupId, $fromMemberId, $toMemberId,
-            $amount, $note !== '' ? $note : null, $context->userId,
-            $isTransfer ? 'transfer' : 'payment',
-        ]);
-    } else {
-        $stmt = $context->pdo->prepare("
-            INSERT INTO settlements (group_id, from_member_id, to_member_id, amount, note, created_by)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ");
-        $stmt->execute([
-            $context->groupId, $fromMemberId, $toMemberId,
-            $amount, $note !== '' ? $note : null, $context->userId,
-        ]);
-    }
+    // הכתיבה עטופה ביומן החישובים: כשהוא דלוק נשמר צילום של
+    // המאזן לפני ואחרי, וזו הדרך היחידה לבדוק בדיעבד טענה כמו
+    // "רשמתי תשלום והחישוב השתבש". כשהוא כבוי זה קורא לסגור ותו לא.
+    $settlementId = debugAround(
+        $context->pdo, $context->groupId, $context->userId,
+        $isTransfer ? 'transfer' : 'payment',
+        [
+            'from_member_id' => $fromMemberId,
+            'to_member_id'   => $toMemberId,
+            'amount'         => $amount,
+        ],
+        function () use ($context, $hasType, $fromMemberId, $toMemberId, $amount, $note, $isTransfer) {
+            if ($hasType) {
+                $stmt = $context->pdo->prepare("
+                    INSERT INTO settlements (group_id, from_member_id, to_member_id, amount, note, created_by, type)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                ");
+                $stmt->execute([
+                    $context->groupId, $fromMemberId, $toMemberId,
+                    $amount, $note !== '' ? $note : null, $context->userId,
+                    $isTransfer ? 'transfer' : 'payment',
+                ]);
+            } else {
+                $stmt = $context->pdo->prepare("
+                    INSERT INTO settlements (group_id, from_member_id, to_member_id, amount, note, created_by)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ");
+                $stmt->execute([
+                    $context->groupId, $fromMemberId, $toMemberId,
+                    $amount, $note !== '' ? $note : null, $context->userId,
+                ]);
+            }
 
-    // חייב להילקח לפני ההתראה, שמבצעת INSERT משלה
-    $settlementId = (int)$context->pdo->lastInsertId();
+            // חייב להילקח כאן, לפני הצילום השני וההתראה - שתיהן
+            // מבצעות שאילתות משלהן ומאפסות את lastInsertId
+            return (int)$context->pdo->lastInsertId();
+        }
+    );
 
     // שני הצדדים מקבלים הודעה, גם אם מישהו אחר רשם אותה
     $symbol = currencySymbol();
@@ -1240,8 +1256,18 @@ function actionDeleteSettlement(GroupContext $context) {
         return;
     }
 
-    $stmt = $context->pdo->prepare("DELETE FROM settlements WHERE id = ? AND group_id = ?");
-    $stmt->execute([$settlementId, $context->groupId]);
+    debugAround(
+        $context->pdo, $context->groupId, $context->userId, 'delete',
+        [
+            'settlement_id'  => $settlementId,
+            'from_member_id' => (int)$settlement['from_member_id'],
+            'to_member_id'   => (int)$settlement['to_member_id'],
+        ],
+        function () use ($context, $settlementId) {
+            $stmt = $context->pdo->prepare("DELETE FROM settlements WHERE id = ? AND group_id = ?");
+            $stmt->execute([$settlementId, $context->groupId]);
+        }
+    );
 
     $body = actorName() . ' ביטל התחשבנות ב"' . groupDisplayName($context) . '"';
     foreach ([(int)$settlement['from_member_id'], (int)$settlement['to_member_id']] as $party) {

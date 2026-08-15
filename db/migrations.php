@@ -544,6 +544,41 @@ function migrationCatalog(PDO $pdo, $dbName) {
         ],
     ];
 
+    // --------------------------------------------------------
+    // יומן חישובים. כשמשתמש מדווח ש"התשלום שיבש את החישוב", אין
+    // דרך לשחזר מה השרת באמת חישב רגע לפני ורגע אחרי - הדף כבר
+    // נטען מחדש. הטבלה הזו שומרת את שני הצילומים בזמן הפעולה
+    // עצמה, ולכן היא היחידה שיכולה לענות על השאלה.
+    $catalog[] = [
+        'id'    => '013',
+        'title' => 'יומן חישובים',
+        'steps' => [
+            stepCreateTable($pdo, $dbName, 'calculation_debug', "
+                CREATE TABLE `calculation_debug` (
+                    `id`         INT AUTO_INCREMENT PRIMARY KEY,
+                    `group_id`   INT          NOT NULL,
+                    `user_id`    INT          NULL DEFAULT NULL,
+                    `action`     VARCHAR(40)  NOT NULL,
+                    `payload`    TEXT         NULL DEFAULT NULL,
+                    `before_json` MEDIUMTEXT  NULL DEFAULT NULL,
+                    `after_json`  MEDIUMTEXT  NULL DEFAULT NULL,
+                    `created_at` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    INDEX `idx_debug_group` (`group_id`, `id`),
+                    INDEX `idx_debug_created` (`created_at`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"),
+
+            // היומן כבוי כברירת מחדל ונדלק מאזור הניהול. בלי מתג
+            // הוא היה כותב שתי רשומות על כל תשלום לנצח, גם כשאיש
+            // אינו מחפש דבר.
+            stepCreateTable($pdo, $dbName, 'app_settings', "
+                CREATE TABLE `app_settings` (
+                    `name`       VARCHAR(64) PRIMARY KEY,
+                    `value`      VARCHAR(255) NOT NULL,
+                    `updated_at` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"),
+        ],
+    ];
+
     return $catalog;
 }
 

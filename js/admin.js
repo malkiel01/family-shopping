@@ -725,3 +725,116 @@ async function adminGroupAction(groupId, mode, groupName) {
     alert(data.message);
     location.reload();
 }
+
+// ============================================================
+// יומן החישובים
+// ============================================================
+
+/**
+ * הדלקה וכיבוי.
+ *
+ * המצב נשמר בשרת ולא כאן: הפעולה שנרשמת מתבצעת בבקשה אחרת
+ * לגמרי - תשלום במסך האירוע - ומתג שחי בדפדפן לא היה מגיע אליה.
+ */
+async function toggleDebugLog(button) {
+    const turningOn = button.dataset.on !== '1';
+
+    button.disabled = true;
+    const data = await callAction('debugToggle', { value: turningOn ? '1' : '0' });
+    button.disabled = false;
+
+    if (!data) return;
+
+    button.dataset.on  = data.enabled ? '1' : '0';
+    button.textContent = data.enabled ? 'כבה' : 'הדלק';
+
+    const state = document.getElementById('debugStateText');
+    if (state) {
+        state.textContent = data.enabled
+            ? 'פעיל — פעולות נרשמות'
+            : 'כבוי — שום דבר לא נרשם';
+    }
+
+    const card = button.closest('.admin-task');
+    if (card) {
+        card.classList.toggle('danger', !data.enabled);
+    }
+}
+
+/** טוען מחדש את הדוח לאירוע הנבחר */
+async function refreshDebugReport() {
+    const select = document.getElementById('debugGroupSelect');
+    const report = document.getElementById('debugReport');
+    if (!select || !report) return;
+
+    report.textContent = 'טוען...';
+
+    const data = await callAction('debugReport', { group_id: select.value });
+
+    if (!data) {
+        report.textContent = 'טעינת הדוח נכשלה';
+        return;
+    }
+
+    report.textContent = data.text;
+}
+
+/**
+ * העתקה ללוח.
+ *
+ * clipboard.writeText זמין רק בהקשר מאובטח, ובלעדיו נשארת בחירת
+ * הטקסט הישנה. שתי הדרכים מסתיימות באותו מקום, ולכן שתיהן כאן.
+ */
+async function copyDebugReport(button) {
+    const report = document.getElementById('debugReport');
+    if (!report) return;
+
+    const text     = report.textContent;
+    const original = button.innerHTML;
+
+    try {
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+        } else {
+            const area = document.createElement('textarea');
+            area.value = text;
+            area.style.position = 'fixed';
+            area.style.opacity  = '0';
+            document.body.appendChild(area);
+            area.select();
+            document.execCommand('copy');
+            document.body.removeChild(area);
+        }
+
+        button.innerHTML = '<i class="fas fa-check"></i> הועתק';
+    } catch (error) {
+        console.error('Copy failed:', error);
+
+        // כישלון בהעתקה אינו סוף הדרך: בחירת הטקסט מאפשרת
+        // העתקה ידנית, וזה עדיף על הודעת שגיאה שלא עוזרת
+        const range = document.createRange();
+        range.selectNodeContents(report);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+
+        button.innerHTML = '<i class="fas fa-hand-pointer"></i> סמן והעתק';
+    }
+
+    setTimeout(() => { button.innerHTML = original; }, 2500);
+}
+
+async function clearDebugLog(button) {
+    if (!confirm('למחוק את כל רשומות היומן?\n\nהאירועים, הקניות וההתחשבנויות לא ייגעו.')) {
+        return;
+    }
+
+    button.disabled = true;
+    const data = await callAction('debugClear');
+    button.disabled = false;
+
+    if (!data) return;
+
+    alert(data.message);
+    refreshDebugReport();
+}
