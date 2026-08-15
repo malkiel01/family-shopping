@@ -1136,6 +1136,52 @@ function actionDeleteItem(GroupContext $context) {
 // התחשבנות
 // ============================================================
 
+/** כמה שניות אחורה נחשבות "אותה לחיצה" */
+const SETTLEMENT_DEDUPE_SECONDS = 120;
+
+/**
+ * מחפש התחשבנות זהה שנרשמה זה עתה.
+ *
+ * החלון נמדד לפי שעון המסד ולא לפי שעון PHP: השניים לא תמיד
+ * מכוונים לאותו אזור זמן, ופער של שעה היה הופך את הבדיקה
+ * לחסרת משמעות - או חוסם רישומים לגיטימיים במשך שעה.
+ *
+ * @return int|null מזהה ההתחשבנות הקיימת, או null
+ */
+function findRecentSettlement(GroupContext $context, $fromMemberId, $toMemberId, $amount) {
+    $driver = '';
+    try {
+        $driver = (string)$context->pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+    } catch (Exception $e) {
+        $driver = '';
+    }
+
+    $cutoff = ($driver === 'sqlite')
+        ? "datetime('now', '-" . SETTLEMENT_DEDUPE_SECONDS . " seconds')"
+        : "DATE_SUB(NOW(), INTERVAL " . SETTLEMENT_DEDUPE_SECONDS . " SECOND)";
+
+    try {
+        $stmt = $context->pdo->prepare("
+            SELECT id FROM settlements
+            WHERE group_id = ?
+              AND from_member_id = ?
+              AND to_member_id = ?
+              AND ABS(amount - ?) < 0.005
+              AND created_at >= $cutoff
+            ORDER BY id DESC
+            LIMIT 1
+        ");
+        $stmt->execute([$context->groupId, $fromMemberId, $toMemberId, $amount]);
+        $id = $stmt->fetchColumn();
+    } catch (Exception $e) {
+        // בדיקה שנכשלה אינה סיבה לחסום רישום אמיתי
+        error_log('duplicate settlement check failed: ' . $e->getMessage());
+        return null;
+    }
+
+    return $id === false ? null : (int)$id;
+}
+
 function actionAddSettlement(GroupContext $context) {
     $fromMemberId = intval($_POST['from_member_id'] ?? 0);
     $toMemberId   = intval($_POST['to_member_id'] ?? 0);
@@ -1169,6 +1215,30 @@ function actionAddSettlement(GroupContext $context) {
     $isParty = ($context->memberId === $fromMemberId || $context->memberId === $toMemberId);
     if (!$context->isOwner && !$isParty) {
         jsonFail('רק מנהל הקבוצה או אחד הצדדים יכולים לרשום את ההעברה');
+        return;
+    }
+
+    // --- הגנה מפני רישום כפול ---
+    //
+    // שתי לחיצות על "שולם" הן בקשה אחת בכוונת המשתמש, אבל הדפדפן
+    // שולח שתיים - והשנייה יוצאת לדרך לפני שהראשונה חזרה. התוצאה
+    // היא שני תשלומים זהים, ומכיוון שיחד הם לרוב עדיין קטנים
+    // מהחוב, גם נשאר חוב פתוח. זה נראה כמו "התשלום נרשם פעמיים
+    // וגם לא קוזז", וזה מקרה אחד ולא שניים.
+    //
+    // הכפתור ננעל גם בצד הלקוח, אבל הנעילה שם היא נוחות בלבד:
+    // מי שהבקשה השנייה שלו כבר יצאה לא יעצור בגללה. ההכרעה
+    // חייבת להיות כאן, מול הרשומות עצמן.
+    $duplicate = findRecentSettlement($context, $fromMemberId, $toMemberId, $amount);
+    if ($duplicate !== null) {
+        // לא שגיאה: הפעולה שהמשתמש התכוון אליה בוצעה, פעם אחת.
+        // הודעת כישלון הייתה מותירה את המסך פתוח ואת הרושם ששום
+        // דבר לא נרשם - בדיוק ההפך מהמצב.
+        jsonOk([
+            'settlement_id' => (int)$duplicate,
+            'duplicate'     => true,
+            'message'       => 'ההתחשבנות הזו כבר נרשמה לפני רגע, ולא נרשמה שוב',
+        ]);
         return;
     }
 
