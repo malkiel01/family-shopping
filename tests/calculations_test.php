@@ -314,5 +314,167 @@ echo "\n14ה. תעריף אפס מתנהג כאילו אין תעריף\n";
 $r = calculateGroupBalance($mS,$pS,[],0);
 check('חוזרים לחלוקה יחסית', byNick($r,'משפחה גדולה')['shouldPay'], 400);
 
+// ============================================================
+echo "\n15. יציבות התוכנית אחרי תשלום\n";
+// ============================================================
+// זה הבאג שדווח, ואלה הנתונים האמיתיים שבהם הוא נתפס: אירוע
+// "בית זורע 2026", חמישה משתתפים ב-20% כל אחד.
+//
+// שמואל היה חייב 159.26 למלכיאל ו-132.16 לחלילי. הוא שילם לחלילי
+// את ה-132.16 - ומיד אחר כך הופיע כחייב לחלילי 159.26, יותר ממה
+// ששילם. הסכום הכולל היה נכון; מה שהשתנה היה מי משלם למי.
+//
+// הסיבה: הסדר החמדני נגזר מהמאזן הפתוח. התשלום הקטין את החוב של
+// שמואל, הוא ירד למקום השלישי בתור, ויוסף חיים תפס את מקומו.
+// הדרישה כאן היא פשוטה: תשלום מוחק את השורה ששולמה, ולא נוגע
+// באף שורה אחרת.
+
+$mZ = [
+  member(52,'מלכיאל',   'percentage',20),
+  member(53,'יוסף חיים','percentage',20),
+  member(54,'חלילי',    'percentage',20),
+  member(57,'שמואל',    'percentage',20),
+  member(59,'חגי',      'percentage',20),
+];
+$pZ = [
+  ['id'=>1,'member_id'=>52,'amount'=>1027.00,'excluded_ids'=>[]],
+  ['id'=>2,'member_id'=>53,'amount'=>282.00, 'excluded_ids'=>[]],
+  ['id'=>3,'member_id'=>54,'amount'=>907.00, 'excluded_ids'=>[]],
+  ['id'=>4,'member_id'=>57,'amount'=>237.00, 'excluded_ids'=>[]],
+  ['id'=>5,'member_id'=>59,'amount'=>189.10, 'excluded_ids'=>[]],
+];
+
+/** שורת העברה לפי שמות, או null */
+function transferBetween($result, $from, $to) {
+    foreach ($result['transfers'] as $transfer) {
+        if ($transfer['from'] === $from && $transfer['to'] === $to) {
+            return $transfer;
+        }
+    }
+    return null;
+}
+
+$before = calculateGroupBalance($mZ, $pZ, []);
+check('לפני תשלום: 4 שורות', count($before['transfers']), 4);
+check('חגי למלכיאל',        transferBetween($before,'חגי','מלכיאל')['amount'], 339.32);
+check('שמואל למלכיאל',      transferBetween($before,'שמואל','מלכיאל')['amount'], 159.26);
+check('שמואל לחלילי',       transferBetween($before,'שמואל','חלילי')['amount'], 132.16);
+check('יוסף חיים לחלילי',   transferBetween($before,'יוסף חיים','חלילי')['amount'], 246.42);
+
+// שמואל משלם לחלילי בדיוק את השורה שהוצגה לו
+$after = calculateGroupBalance($mZ, $pZ, [
+  ['from_member_id'=>57,'to_member_id'=>54,'amount'=>132.16],
+]);
+
+check('אחרי תשלום: השורה נמחקה', count($after['transfers']), 3);
+check('שמואל אינו חייב עוד לחלילי',
+    transferBetween($after,'שמואל','חלילי') === null ? 1 : 0, 1);
+check('החוב של שמואל למלכיאל לא זז',
+    transferBetween($after,'שמואל','מלכיאל')['amount'], 159.26);
+check('החוב של חגי לא זז',
+    transferBetween($after,'חגי','מלכיאל')['amount'], 339.32);
+check('החוב של יוסף חיים לא זז',
+    transferBetween($after,'יוסף חיים','חלילי')['amount'], 246.42);
+check('סך ההעברות פחת בדיוק בגובה התשלום',
+    array_sum(array_column($after['transfers'],'amount')), 877.16 - 132.16);
+
+// תשלום שני, על שורה אחרת
+$after2 = calculateGroupBalance($mZ, $pZ, [
+  ['from_member_id'=>57,'to_member_id'=>54,'amount'=>132.16],
+  ['from_member_id'=>59,'to_member_id'=>52,'amount'=>339.32],
+]);
+check('אחרי שני תשלומים: 2 שורות', count($after2['transfers']), 2);
+check('שמואל למלכיאל עדיין 159.26',
+    transferBetween($after2,'שמואל','מלכיאל')['amount'], 159.26);
+check('יוסף חיים לחלילי עדיין 246.42',
+    transferBetween($after2,'יוסף חיים','חלילי')['amount'], 246.42);
+
+echo "\n15ב. תשלום חלקי מקטין שורה אחת בלבד\n";
+$partial = calculateGroupBalance($mZ, $pZ, [
+  ['from_member_id'=>57,'to_member_id'=>52,'amount'=>100.00],
+]);
+check('עדיין 4 שורות', count($partial['transfers']), 4);
+check('השורה ששולמה חלקית הצטמצמה',
+    transferBetween($partial,'שמואל','מלכיאל')['amount'], 59.26);
+check('שמואל לחלילי לא זז',
+    transferBetween($partial,'שמואל','חלילי')['amount'], 132.16);
+check('חגי לא זז',  transferBetween($partial,'חגי','מלכיאל')['amount'], 339.32);
+check('יוסף לא זז', transferBetween($partial,'יוסף חיים','חלילי')['amount'], 246.42);
+
+echo "\n15ג. העברת חוב מזיזה רק את שני הצדדים\n";
+// שמואל מעביר לחגי 50 מהחוב שלו. שניהם חייבים, ולכן זה מקטין
+// שורה אחת ומגדיל אחרת - וזה בדיוק מה שהמשתמש ביקש שיקרה.
+$moved = calculateGroupBalance($mZ, $pZ, [
+  ['from_member_id'=>57,'to_member_id'=>59,'amount'=>50.00],
+]);
+check('חלילי לא נגע בזה',
+    transferBetween($moved,'יוסף חיים','חלילי')['amount'], 246.42);
+check('סך ההעברות לא השתנה',
+    array_sum(array_column($moved['transfers'],'amount')), 877.16);
+
+echo "\n15ד. תשלום לעולם אינו מגדיל שורה קיימת\n";
+// אקראי: בכל תרחיש נבחרת שורה, משולם עליה מלוא הסכום, ונבדק
+// שאף שורה אחרת לא גדלה. זו ההבטחה שהמשתמש ביקש, ולכן היא
+// נבדקת על תרחישים ולא רק על הדוגמה שממנה היא נולדה.
+mt_srand(20260815);
+$violations  = 0;
+$reshuffles  = 0;
+$rounds      = 3000;
+
+for ($round = 0; $round < $rounds; $round++) {
+    $count   = mt_rand(3, 8);
+    $mF      = [];
+    $share   = round(100 / $count, 2);
+    for ($i = 1; $i <= $count; $i++) {
+        $mF[] = member($i, 'ח' . $i, 'percentage', $i === $count ? round(100 - $share * ($count - 1), 2) : $share);
+    }
+
+    $pF = [];
+    for ($i = 0, $n = mt_rand(1, 6); $i < $n; $i++) {
+        $pF[] = ['id'=>$i+1, 'member_id'=>mt_rand(1,$count),
+                 'amount'=>mt_rand(1000, 500000) / 100, 'excluded_ids'=>[]];
+    }
+
+    $plan = calculateGroupBalance($mF, $pF, [])['transfers'];
+    if (count($plan) === 0) {
+        continue;
+    }
+
+    $paid = $plan[mt_rand(0, count($plan) - 1)];
+    $next = calculateGroupBalance($mF, $pF, [[
+        'from_member_id' => $paid['from_id'],
+        'to_member_id'   => $paid['to_id'],
+        'amount'         => $paid['amount'],
+    ]])['transfers'];
+
+    $nextMap = [];
+    foreach ($next as $transfer) {
+        $nextMap[$transfer['from_id'] . '>' . $transfer['to_id']] = $transfer['amount'];
+    }
+
+    foreach ($plan as $transfer) {
+        $key = $transfer['from_id'] . '>' . $transfer['to_id'];
+
+        // השורה ששולמה אמורה להיעלם
+        if ($key === $paid['from_id'] . '>' . $paid['to_id']) {
+            if (isset($nextMap[$key])) {
+                $violations++;
+            }
+            continue;
+        }
+
+        // וכל השאר אמורות להישאר בדיוק כפי שהיו
+        if (!isset($nextMap[$key])) {
+            $reshuffles++;
+        } elseif ($nextMap[$key] - $transfer['amount'] > 0.011) {
+            $violations++;
+        }
+    }
+}
+
+check('אף שורה לא גדלה אחרי תשלום', $violations, 0);
+check('אף שורה לא נעלמה בלי ששולמה', $reshuffles, 0);
+printf("  (%d תרחישים אקראיים)\n", $rounds);
+
 echo "\n" . str_repeat('=',50) . "\nעבר: $pass | נכשל: $fail\n";
 exit($fail > 0 ? 1 : 0);
