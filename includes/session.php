@@ -93,13 +93,36 @@ function rejectRequest($message = 'Invalid security token') {
 }
 
 /**
+ * האם הנתיב הוא אחד ממסכי הכניסה והיציאה.
+ *
+ * יעד חזרה שמצביע על אחד מהם הוא לולאה מוכנה: ההתחברות מפנה
+ * ליציאה, היציאה מנתקת ומפנה להתחברות, וחוזר חלילה. המסך פשוט
+ * מהבהב, ואין שום דרך להבין ממנו מה קרה.
+ */
+function isAuthPath($path) {
+    $path = strtok((string)$path, '?');
+
+    if ($path === false || $path === '') {
+        return false;
+    }
+
+    return in_array(basename($path), [
+        'login.php', 'logout.php', 'google-auth.php',
+        'forgot-password.php', 'reset-password.php',
+    ], true);
+}
+
+/**
  * מפנה להתחברות ושומר את היעד המבוקש לחזרה אחריה.
  */
 function redirectToLogin($query = '') {
     $target = $_SERVER['REQUEST_URI'] ?? '';
 
-    // שומרים רק נתיבים פנימיים, לא URL מלא
-    if ($target !== '' && $target[0] === '/' && strpos($target, '//') !== 0) {
+    // שומרים רק נתיבים פנימיים, לא URL מלא, ולא את מסכי הכניסה
+    // עצמם - חזרה אליהם היא לולאה
+    if ($target !== '' && $target[0] === '/'
+        && strpos($target, '//') !== 0
+        && !isAuthPath($target)) {
         $_SESSION['redirect_after_login'] = $target;
     }
 
@@ -122,6 +145,12 @@ function consumeLoginRedirect() {
 
     // רק נתיבים יחסיים לאתר עצמו - הגנה מפני open redirect
     if ($target[0] !== '/' || strpos($target, '//') === 0) {
+        return null;
+    }
+
+    // שסתום ביטחון: גם אם יעד כזה נשמר בעבר, או נותר מגרסה
+    // קודמת ב-session פעיל, הוא לא יחזיר את המשתמש לכניסה
+    if (isAuthPath($target)) {
         return null;
     }
 
