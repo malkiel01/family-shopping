@@ -2021,3 +2021,59 @@ body {
 .link-button:hover {
     color: #4a55c7;
 }
+
+/* --- מספור ההעברות ---
+   כל כרטיס נושא את מספרו הסידורי, והכותרת את הסכום הכולל. זה
+   לא קישוט: בלעדיהם אי אפשר להבחין בין שגיאת חישוב לבין צילום
+   מסך מתגלגל ששכפל רצועה, ושתי האפשרויות נראות זהות. */
+.transfers-section h3 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.transfers-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 7px;
+    border-radius: 999px;
+    background: #eef0fb;
+    color: #4a55c7;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.transfers-total {
+    font-size: 13px;
+    color: #6d7387;
+    margin-bottom: 10px;
+}
+
+.transfers-total strong {
+    color: #3a3f52;
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
+.transfer-card {
+    position: relative;
+}
+
+.transfer-index {
+    position: absolute;
+    top: 8px;
+    inset-inline-start: 10px;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: #f1f2f7;
+    color: #8a90a6;
+    font-size: 11px;
+    font-weight: 700;
+}
