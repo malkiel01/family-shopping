@@ -23,6 +23,7 @@ require_once 'includes/admin_system.php';
 require_once 'includes/admin_invitations.php';
 require_once 'includes/admin_export.php';
 require_once 'includes/admin_deploy.php';
+require_once 'includes/debug_log.php';
 
 $pdo     = getDBConnection();
 $user_id = $_SESSION['user_id'];
@@ -126,6 +127,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         case 'cancelStaleInvitations':
             $respond(adminCancelStaleInvitations($pdo, $user_id, intval($_POST['days'] ?? 30)));
 
+        // --- יומן החישובים ---
+        case 'debugToggle':
+            $on = ($_POST['value'] ?? '') === '1';
+            setDebugLogEnabled($pdo, $on);
+            echo json_encode([
+                'success' => true,
+                'enabled' => $on,
+                'message' => $on ? 'יומן החישובים פעיל' : 'יומן החישובים כבוי',
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+
+        case 'debugReport':
+            $reportGroup = intval($_POST['group_id'] ?? 0);
+            $entries     = debugLogEntries($pdo, 20, $reportGroup);
+            $snapshot    = $reportGroup > 0 ? debugSnapshot($pdo, $reportGroup) : null;
+
+            echo json_encode([
+                'success' => true,
+                'text'    => debugLogText($entries, isset($snapshot['transfers']) ? $snapshot : null),
+                'count'   => count($entries),
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+
+        case 'debugClear':
+            $removed = clearDebugLog($pdo);
+            echo json_encode([
+                'success' => true,
+                'message' => "נמחקו $removed רשומות",
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+
         case 'deploy':
             $result = runDeploy($pdo, $user_id);
             echo json_encode([
@@ -155,6 +187,27 @@ $inviteCount = adminInvitationCounts($pdo);
 $datasets    = exportDatasets();
 $deploy      = deployStatus();
 
+// --- יומן החישובים ---
+// האירוע הנבחר מגיע מהכתובת, ואם אין - מהרשומה האחרונה ביומן.
+// זו כמעט תמיד הבחירה הנכונה: מי שנכנס לכאן בא לראות את מה
+// שהרגע קרה.
+$debugOn      = debugLogEnabled($pdo);
+$debugGroupId = intval($_GET['debug_group'] ?? 0);
+$debugEntries = debugLogEntries($pdo, 20, $debugGroupId);
+
+if ($debugGroupId === 0 && count($debugEntries) > 0) {
+    $debugGroupId = (int)$debugEntries[0]['group_id'];
+}
+
+$debugSnapshot = $debugGroupId > 0 ? debugSnapshot($pdo, $debugGroupId) : null;
+$debugValid    = isset($debugSnapshot['transfers']) ? $debugSnapshot : null;
+$debugChecks   = $debugValid ? debugChecks($debugValid) : [];
+$debugText     = debugLogText($debugEntries, $debugValid);
+
+$debugIssues = count(array_filter($debugChecks, function ($check) {
+    return !$check['ok'];
+}));
+
 /** כמה בדיקות תקינות אינן במצב תקין */
 $healthIssues = count(array_filter($health, function ($check) {
     return $check['state'] !== 'ok';
@@ -168,6 +221,7 @@ $sections = [
     'system'      => ['מערכת',         'fa-server'],
     'export'      => ['ייצוא נתונים',  'fa-file-arrow-down'],
     'log'         => ['יומן פעולות',   'fa-clipboard-list'],
+    'debug'       => ['דיבוג חישובים', 'fa-bug'],
     'maintenance' => ['תחזוקה ופיתוח', 'fa-screwdriver-wrench'],
 ];
 
@@ -242,6 +296,8 @@ function adminMoney($value) {
                     <span class="admin-nav-dot" title="<?php echo $healthIssues; ?> בדיקות דורשות תשומת לב"></span>
                 <?php elseif ($key === 'invitations' && $inviteCount['stale'] > 0): ?>
                     <span class="admin-nav-dot" title="<?php echo $inviteCount['stale']; ?> הזמנות תקועות"></span>
+                <?php elseif ($key === 'debug' && $debugIssues > 0): ?>
+                    <span class="admin-nav-dot" title="<?php echo $debugIssues; ?> בדיקות חישוב נכשלו"></span>
                 <?php endif; ?>
             </button>
             <?php endforeach; ?>
@@ -910,9 +966,121 @@ function adminMoney($value) {
                     <li><code>php tests/calculations_test.php</code><span>בדיקות מנוע החישוב</span></li>
                     <li><code>php tests/actions_test.php</code><span>בדיקות שכבת הפעולות</span></li>
                     <li><code>php tests/webpush_test.php</code><span>בדיקות ההצפנה והחתימה</span></li>
+                    <li><code>php tests/debug_log_test.php</code><span>בדיקות יומן החישובים</span></li>
                 </ul>
             </div>
         </div><!-- pane-maintenance -->
+
+        <!-- ==================================== דיבוג חישובים -->
+        <div class="admin-pane" id="pane-debug" hidden>
+
+            <div class="admin-card">
+                <h2 class="admin-card-title"><i class="fas fa-bug"></i> יומן חישובים</h2>
+                <p class="admin-note">
+                    כשהיומן דלוק, כל תשלום, תשלום חלקי, העברת חוב וביטול
+                    שומרים צילום של המאזן לפני ואחרי הפעולה. זו הדרך היחידה
+                    לבדוק בדיעבד מה השרת באמת חישב — ולא מה שנראה על המסך.
+                </p>
+                <p class="admin-note">
+                    הוא כבוי כברירת מחדל. מדליקים, מבצעים את הפעולות, מעתיקים
+                    את הדוח — ומכבים.
+                </p>
+
+                <div class="admin-task<?php echo $debugOn ? '' : ' danger'; ?>">
+                    <div class="admin-task-text">
+                        <strong>מצב היומן</strong>
+                        <span id="debugStateText"><?php echo $debugOn ? 'פעיל — פעולות נרשמות' : 'כבוי — שום דבר לא נרשם'; ?></span>
+                    </div>
+                    <button class="btn-primary" id="debugToggleBtn"
+                            data-on="<?php echo $debugOn ? '1' : '0'; ?>"
+                            onclick="toggleDebugLog(this)">
+                        <?php echo $debugOn ? 'כבה' : 'הדלק'; ?>
+                    </button>
+                </div>
+
+                <?php if (!debugTableExists($pdo, 'calculation_debug')): ?>
+                <div class="admin-inline-warning">
+                    <i class="fas fa-database"></i>
+                    טבלת היומן עוד לא נוצרה. יש להריץ את המיגרציות בלשונית
+                    "תחזוקה ופיתוח".
+                </div>
+                <?php endif; ?>
+            </div>
+
+            <div class="admin-card">
+                <h2 class="admin-card-title"><i class="fas fa-magnifying-glass-chart"></i> בדיקת אירוע</h2>
+
+                <div class="form-group">
+                    <label for="debugGroupSelect">איזה אירוע לבדוק?</label>
+                    <select id="debugGroupSelect" onchange="refreshDebugReport()">
+                        <option value="0">— בחר אירוע —</option>
+                        <?php foreach ($groups as $group): ?>
+                        <option value="<?php echo (int)$group['id']; ?>"
+                            <?php echo (int)$group['id'] === $debugGroupId ? ' selected' : ''; ?>>
+                            #<?php echo (int)$group['id']; ?> — <?php echo htmlspecialchars($group['name']); ?>
+                            (<?php echo (int)$group['member_count']; ?> משתתפים)
+                        </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <?php if ($debugValid): ?>
+                <div class="admin-stats">
+                    <div class="admin-stat">
+                        <span class="admin-stat-value"><?php echo $debugValid['member_rows']; ?></span>
+                        <span class="admin-stat-label">שורות משתתף</span>
+                    </div>
+                    <div class="admin-stat <?php echo $debugValid['member_rows'] !== $debugValid['unique_members'] ? 'warn' : ''; ?>">
+                        <span class="admin-stat-value"><?php echo $debugValid['unique_members']; ?></span>
+                        <span class="admin-stat-label">משתתפים ייחודיים</span>
+                    </div>
+                    <div class="admin-stat">
+                        <span class="admin-stat-value"><?php echo $debugValid['transfer_count']; ?></span>
+                        <span class="admin-stat-label">שורות העברה</span>
+                    </div>
+                    <div class="admin-stat <?php echo $debugValid['stored_settlements'] !== $debugValid['used_settlements'] ? 'warn' : ''; ?>">
+                        <span class="admin-stat-value"><?php echo $debugValid['used_settlements']; ?>/<?php echo $debugValid['stored_settlements']; ?></span>
+                        <span class="admin-stat-label">התחשבנויות בחישוב</span>
+                    </div>
+                </div>
+
+                <ul class="admin-checks">
+                    <?php foreach ($debugChecks as $check): ?>
+                    <li class="admin-check <?php echo $check['ok'] ? 'ok' : 'fail'; ?>">
+                        <i class="fas <?php echo $check['ok'] ? 'fa-check' : 'fa-triangle-exclamation'; ?>"></i>
+                        <div>
+                            <strong><?php echo htmlspecialchars($check['label']); ?></strong>
+                            <span><?php echo htmlspecialchars($check['detail']); ?></span>
+                        </div>
+                    </li>
+                    <?php endforeach; ?>
+                </ul>
+                <?php endif; ?>
+            </div>
+
+            <div class="admin-card">
+                <h2 class="admin-card-title"><i class="fas fa-clipboard"></i> הדוח להעתקה</h2>
+                <p class="admin-note">
+                    כל מה שצריך כדי לאבחן, בטקסט אחד: מצב האירוע כרגע, כל
+                    שורות ההעברה עם המזהים שלהן, ולכל פעולה ביומן — מה היה
+                    לפניה ומה אחריה.
+                </p>
+
+                <div class="admin-actions-row">
+                    <button class="btn-primary" onclick="copyDebugReport(this)">
+                        <i class="fas fa-copy"></i> העתק הכל
+                    </button>
+                    <button class="btn-secondary" onclick="refreshDebugReport()">
+                        <i class="fas fa-rotate"></i> רענן
+                    </button>
+                    <button class="btn-secondary" onclick="clearDebugLog(this)">
+                        <i class="fas fa-eraser"></i> נקה יומן
+                    </button>
+                </div>
+
+                <pre class="admin-debug-report" id="debugReport"><?php echo htmlspecialchars($debugText); ?></pre>
+            </div>
+        </div><!-- pane-debug -->
     </div>
 
     <!-- צירוף משתמש לאירוע -->
